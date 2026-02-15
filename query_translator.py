@@ -73,6 +73,9 @@ If you cannot translate the query, respond with: ERROR: <reason>
             
         Returns:
             KQL query string
+            
+        Raises:
+            ValueError: If Azure OpenAI is not configured
         """
         # Check for common query shortcuts
         query_lower = natural_language_query.lower().strip()
@@ -80,9 +83,12 @@ If you cannot translate the query, respond with: ERROR: <reason>
             if keyword in query_lower:
                 return kql
         
-        # If OpenAI is not configured, try pattern matching
+        # If OpenAI is not configured, raise an error
         if not self.client:
-            return self._pattern_based_translation(natural_language_query)
+            raise ValueError(
+                "Azure OpenAI is not configured. Please set AZURE_OPENAI_ENDPOINT, "
+                "AZURE_OPENAI_KEY, and AZURE_OPENAI_DEPLOYMENT environment variables."
+            )
         
         # Use AI for translation
         return self._ai_translate(natural_language_query, available_tables)
