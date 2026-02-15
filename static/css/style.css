@@ -321,87 +321,11 @@ body {
    Content Layout - New Structure
    ================================================ */
 
-.content-wrapper {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    gap: var(--spacing-md);
-    min-height: 0;
-}
-
-/* Results Panel - Full Width Top */
-.results-panel {
-    flex: 1;
-    min-height: 300px;
-    display: flex;
-    flex-direction: column;
-}
-
-.results-panel.fullscreen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 1000;
-    border-radius: 0;
-    margin: 0;
-}
-
-/* Bottom Panels - Query & Data Sources */
-.bottom-panels {
+.content-grid {
     display: grid;
-    grid-template-columns: 1fr 300px;
-    gap: var(--spacing-md);
-    max-height: 350px;
-    transition: max-height 0.3s ease;
-}
-
-.bottom-panels.minimized {
-    max-height: 50px;
-}
-
-/* Query Panel */
-.query-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.query-panel.minimized .query-content {
-    display: none;
-}
-
-.query-content {
-    display: flex;
-    flex-direction: column;
-    padding: var(--spacing-md);
-    gap: var(--spacing-md);
-    overflow-y: auto;
-}
-
-/* Tables Panel in Bottom */
-.tables-panel {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.tables-panel.minimized .tables-content {
-    display: none;
-}
-
-.tables-content {
-    display: flex;
-    flex-direction: column;
+    grid-template-columns: 1fr 1.5fr 0.8fr;
+    gap: var(--spacing-lg);
     flex: 1;
-    overflow: hidden;
-}
-
-.tables-panel .panel-controls {
-    display: flex;
-    gap: var(--spacing-xs);
 }
 
 /* ================================================
@@ -725,16 +649,7 @@ body {
    Results Panel
    ================================================ */
 
-.results-panel {
-    min-height: 500px;
-}
-
-.results-container {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
+/* Note: results-panel and results-container are defined in the Content Layout section */
 
 .empty-state,
 .loading-state {
@@ -822,12 +737,16 @@ body {
     50% { opacity: 0.5; }
 }
 
-/* Results Table */
+/* Results Table - Freeze Panes Style */
 .results-table-wrapper {
     flex: 1;
     overflow: auto;
-    padding: var(--spacing-md);
+<<<<<<< HEAD
+    padding: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
     scroll-behavior: smooth;
+    min-height: 0; /* Important for flex child scrolling */
+=======
+    padding: var(--spacing-md);
 }
 
 .results-table {
@@ -840,6 +759,7 @@ body {
 .results-table th {
     position: sticky;
     top: 0;
+    z-index: 10; /* Keep header above scrolling content */
     background: var(--bg-dark);
     padding: var(--spacing-md);
     text-align: left;
@@ -850,8 +770,8 @@ body {
     color: var(--primary);
     border-bottom: 2px solid var(--primary);
     white-space: nowrap;
-    min-width: 120px;
 }
+>>>>>>> parent of 706636c (change allingment)
 
 .results-table td {
     padding: var(--spacing-md);
@@ -923,72 +843,6 @@ body {
     font-size: 0.75rem;
     color: var(--text-muted);
     width: 50px;
-}
-
-/* ================================================
-   Chart Container
-   ================================================ */
-
-.chart-container {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-lg);
-    margin: var(--spacing-md);
-    padding: var(--spacing-md);
-    height: 350px;
-    position: relative;
-}
-
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-md);
-    padding-bottom: var(--spacing-sm);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.chart-title {
-    font-family: var(--font-display);
-    font-size: 0.85rem;
-    color: var(--primary);
-    letter-spacing: 2px;
-}
-
-.chart-controls {
-    display: flex;
-    gap: var(--spacing-sm);
-    align-items: center;
-}
-
-.chart-select {
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    border-radius: var(--radius-sm);
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    cursor: pointer;
-    outline: none;
-}
-
-.chart-select:hover {
-    border-color: var(--primary);
-}
-
-.chart-select:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 10px var(--primary-glow);
-}
-
-.chart-select option {
-    background: var(--bg-dark);
-    color: var(--text-primary);
-}
-
-#resultsChart {
-    max-height: 280px;
 }
 
 /* ================================================

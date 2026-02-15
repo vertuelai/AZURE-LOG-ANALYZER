@@ -184,18 +184,67 @@
                             <pre class="kql-code" id="kqlCode"></pre>
                         </div>
 
-                        <!-- Sample Queries -->
-                        <div class="sample-queries">
-                            <div class="sample-header">
-                                <i class="fas fa-lightbulb"></i>
-                                <span>QUICK QUERIES</span>
-                            </div>
-                            <div class="sample-chips" id="sampleChips">
-                                <!-- Populated by JS -->
-                            </div>
-                        </div>
+                <!-- Sample Queries -->
+                <div class="sample-queries">
+                    <div class="sample-header">
+                        <i class="fas fa-lightbulb"></i>
+                        <span>QUICK QUERIES</span>
                     </div>
-                </section>
+                    <div class="sample-chips" id="sampleChips">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Center Panel - Results -->
+            <section class="panel results-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <i class="fas fa-database"></i>
+                        <span>DATA STREAM</span>
+                    </div>
+                    <div class="panel-info">
+                        <span class="row-count" id="rowCount">0 records</span>
+                    </div>
+                    <div class="panel-controls">
+                        <button class="control-btn" id="exportCsvBtn" title="Export CSV">
+                            <i class="fas fa-file-csv"></i>
+                        </button>
+                        <button class="control-btn" id="exportJsonBtn" title="Export JSON">
+                            <i class="fas fa-file-code"></i>
+                        </button>
+                        <button class="control-btn" id="toggleViewBtn" title="Toggle View">
+                            <i class="fas fa-table"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="results-container" id="resultsContainer">
+                    <div class="empty-state" id="emptyState">
+                        <div class="empty-icon">
+                            <i class="fas fa-satellite-dish"></i>
+                        </div>
+                        <h3>AWAITING DATA TRANSMISSION</h3>
+                        <p>Enter a query to begin analyzing your Azure logs</p>
+                    </div>
+                    
+                    <div class="loading-state" id="loadingState" style="display: none;">
+                        <div class="loader">
+                            <div class="loader-ring"></div>
+                            <div class="loader-ring"></div>
+                            <div class="loader-ring"></div>
+                        </div>
+                        <p>PROCESSING QUANTUM DATA...</p>
+                    </div>
+
+                    <div class="results-table-wrapper" id="resultsWrapper" style="display: none;">
+                        <table class="results-table" id="resultsTable">
+                            <thead id="tableHead"></thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
 
                 <!-- Data Sources Panel -->
                 <section class="panel tables-panel" id="tablesPanel">
