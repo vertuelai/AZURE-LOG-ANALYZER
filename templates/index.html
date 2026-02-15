@@ -62,43 +62,15 @@
                         <button class="control-btn" id="scrollEndBtn" title="Scroll to End">
                             <i class="fas fa-angle-double-right"></i>
                         </button>
-                        <div class="control-divider"></div>
-                        <!-- Visualization Dropdown -->
-                        <div class="dropdown" id="vizDropdown">
-                            <button class="control-btn dropdown-toggle" id="vizDropdownBtn" title="Visualizations">
-                                <i class="fas fa-chart-pie"></i>
-                                <span class="btn-label">Visualize</span>
-                                <i class="fas fa-caret-down"></i>
-                            </button>
-                            <div class="dropdown-menu" id="vizDropdownMenu">
-                                <div class="dropdown-header">Charts</div>
-                                <button class="dropdown-item" data-viz="bar"><i class="fas fa-chart-bar"></i> Bar Chart</button>
-                                <button class="dropdown-item" data-viz="line"><i class="fas fa-chart-line"></i> Line Chart</button>
-                                <button class="dropdown-item" data-viz="pie"><i class="fas fa-chart-pie"></i> Pie Chart</button>
-                                <button class="dropdown-item" data-viz="doughnut"><i class="fas fa-circle-notch"></i> Doughnut</button>
-                                <button class="dropdown-item" data-viz="area"><i class="fas fa-chart-area"></i> Area Chart</button>
-                                <div class="dropdown-divider"></div>
-                                <div class="dropdown-header">Analysis</div>
-                                <button class="dropdown-item" data-viz="trend"><i class="fas fa-trending-up"></i> Trend Analysis</button>
-                                <button class="dropdown-item" data-viz="timeline"><i class="fas fa-clock"></i> Timeline View</button>
-                                <button class="dropdown-item" data-viz="heatmap"><i class="fas fa-th"></i> Activity Heatmap</button>
-                                <div class="dropdown-divider"></div>
-                                <div class="dropdown-header">Reports</div>
-                                <button class="dropdown-item" data-viz="summary"><i class="fas fa-file-alt"></i> Summary Report</button>
-                                <button class="dropdown-item" data-viz="stats"><i class="fas fa-calculator"></i> Statistics</button>
-                            </div>
-                        </div>
-                        <div class="control-divider"></div>
+                        <button class="control-btn" id="showChartBtn" title="Show Chart">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
                         <button class="control-btn" id="exportCsvBtn" title="Export CSV">
                             <i class="fas fa-file-csv"></i>
                         </button>
                         <button class="control-btn" id="exportJsonBtn" title="Export JSON">
                             <i class="fas fa-file-code"></i>
                         </button>
-                        <button class="control-btn" id="generateReportBtn" title="Generate PDF Report">
-                            <i class="fas fa-file-pdf"></i>
-                        </button>
-                        <div class="control-divider"></div>
                         <button class="control-btn" id="fullscreenBtn" title="Fullscreen">
                             <i class="fas fa-expand" id="fullscreenIcon"></i>
                         </button>
@@ -123,42 +95,23 @@
                         <p>PROCESSING QUANTUM DATA...</p>
                     </div>
 
-                    <!-- Visualization Container -->
-                    <div class="viz-container" id="vizContainer" style="display: none;">
-                        <div class="viz-header">
-                            <span class="viz-title" id="vizTitle">DATA VISUALIZATION</span>
-                            <div class="viz-controls">
+                    <!-- Chart Container -->
+                    <div class="chart-container" id="chartContainer" style="display: none;">
+                        <div class="chart-header">
+                            <span class="chart-title">DATA VISUALIZATION</span>
+                            <div class="chart-controls">
                                 <select id="chartType" class="chart-select">
                                     <option value="bar">Bar Chart</option>
                                     <option value="line">Line Chart</option>
                                     <option value="pie">Pie Chart</option>
                                     <option value="doughnut">Doughnut</option>
-                                    <option value="area">Area Chart</option>
                                 </select>
-                                <select id="dataColumn" class="chart-select" title="Select Data Column">
-                                    <!-- Populated dynamically -->
-                                </select>
-                                <button class="control-btn" id="closeVizBtn" title="Close">
+                                <button class="control-btn" id="closeChartBtn" title="Close Chart">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
                         </div>
-                        <div class="viz-content">
-                            <canvas id="resultsChart"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- Statistics/Report Container -->
-                    <div class="stats-container" id="statsContainer" style="display: none;">
-                        <div class="stats-header">
-                            <span class="stats-title" id="statsTitle">STATISTICS</span>
-                            <button class="control-btn" id="closeStatsBtn" title="Close">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <div class="stats-content" id="statsContent">
-                            <!-- Populated dynamically -->
-                        </div>
+                        <canvas id="resultsChart"></canvas>
                     </div>
 
                     <div class="results-table-wrapper" id="resultsWrapper" style="display: none;">
