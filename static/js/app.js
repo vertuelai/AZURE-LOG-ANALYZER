@@ -323,6 +323,17 @@ async function exportResults(format) {
 // UI Functions
 // ================================================
 
+function hideChart() {
+    if (state.currentChart) {
+        state.currentChart.destroy();
+        state.currentChart = null;
+    }
+    const chartContainer = document.getElementById('chartContainer');
+    if (chartContainer) {
+        chartContainer.style.display = 'none';
+    }
+}
+
 function displayKql(kql) {
     elements.kqlCode.textContent = kql;
     elements.kqlDisplay.classList.add('visible');
