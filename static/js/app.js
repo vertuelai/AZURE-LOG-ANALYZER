@@ -11,8 +11,10 @@ const API_BASE = '';
 let state = {
     tables: [],
     lastResults: null,
+    lastColumns: null,
     queryCount: 0,
-    isConnected: false
+    isConnected: false,
+    currentChart: null
 };
 
 // ================================================
@@ -41,6 +43,18 @@ const elements = {
     exportCsvBtn: document.getElementById('exportCsvBtn'),
     exportJsonBtn: document.getElementById('exportJsonBtn'),
     
+    // Scroll Navigation
+    scrollStartBtn: document.getElementById('scrollStartBtn'),
+    scrollEndBtn: document.getElementById('scrollEndBtn'),
+    fullscreenBtn: document.getElementById('fullscreenBtn'),
+    
+    // Charts
+    chartContainer: document.getElementById('chartContainer'),
+    resultsChart: document.getElementById('resultsChart'),
+    chartType: document.getElementById('chartType'),
+    showChartBtn: document.getElementById('showChartBtn'),
+    closeChartBtn: document.getElementById('closeChartBtn'),
+    
     // Tables
     tablesList: document.getElementById('tablesList'),
     tableSearch: document.getElementById('tableSearch'),
@@ -49,6 +63,16 @@ const elements = {
     schemaTableName: document.getElementById('schemaTableName'),
     schemaContent: document.getElementById('schemaContent'),
     closeSchemaBtn: document.getElementById('closeSchemaBtn'),
+    
+    // Panel Toggles
+    tablesPanel: document.getElementById('tablesPanel'),
+    toggleTablesBtn: document.getElementById('toggleTablesBtn'),
+    toggleTablesIcon: document.getElementById('toggleTablesIcon'),
+    toggleQueryBtn: document.getElementById('toggleQueryBtn'),
+    queryPanel: document.getElementById('queryPanel'),
+    queryContent: document.getElementById('queryContent'),
+    tablesContent: document.getElementById('tablesContent'),
+    resultsPanel: document.getElementById('resultsPanel'),
     
     // Status
     connectionStatus: document.getElementById('connectionStatus'),
@@ -123,37 +147,295 @@ function setupEventListeners() {
     elements.closeSchemaBtn.addEventListener('click', closeSchema);
     
     // Toggle tables panel minimize/maximize
-    const toggleTablesBtn = document.getElementById('toggleTablesBtn');
-    if (toggleTablesBtn) {
-        toggleTablesBtn.addEventListener('click', toggleTablesPanel);
+    if (elements.toggleTablesBtn) {
+        elements.toggleTablesBtn.addEventListener('click', toggleTablesPanel);
+    }
+    
+    // Toggle query panel
+    if (elements.toggleQueryBtn) {
+        elements.toggleQueryBtn.addEventListener('click', toggleQueryPanel);
+    }
+    
+    // Scroll navigation
+    if (elements.scrollStartBtn) {
+        elements.scrollStartBtn.addEventListener('click', scrollToStart);
+    }
+    if (elements.scrollEndBtn) {
+        elements.scrollEndBtn.addEventListener('click', scrollToEnd);
+    }
+    if (elements.fullscreenBtn) {
+        elements.fullscreenBtn.addEventListener('click', toggleFullscreen);
+    }
+    
+    // Chart controls
+    if (elements.showChartBtn) {
+        elements.showChartBtn.addEventListener('click', showChart);
+    }
+    if (elements.closeChartBtn) {
+        elements.closeChartBtn.addEventListener('click', hideChart);
+    }
+    if (elements.chartType) {
+        elements.chartType.addEventListener('change', () => {
+            if (state.lastResults && state.lastResults.length > 0) {
+                renderChart();
+            }
+        });
     }
 }
 
-// Toggle tables panel minimize/maximize
+// ================================================
+// Tables Panel Toggle
+// ================================================
+
 function toggleTablesPanel() {
-    const tablesPanel = document.getElementById('tablesPanel');
-    const toggleIcon = document.getElementById('toggleTablesIcon');
-    const tablesList = document.getElementById('tablesList');
-    const tableSearch = document.querySelector('.tables-panel .search-box');
-    const schemaSection = document.getElementById('schemaSection');
+    const panel = elements.tablesPanel;
+    const content = elements.tablesContent;
+    const icon = elements.toggleTablesIcon;
     
-    if (tablesPanel.classList.contains('minimized')) {
-        // Maximize
-        tablesPanel.classList.remove('minimized');
-        toggleIcon.classList.remove('fa-plus');
-        toggleIcon.classList.add('fa-minus');
-        if (tablesList) tablesList.style.display = '';
-        if (tableSearch) tableSearch.style.display = '';
-        if (schemaSection) schemaSection.style.display = '';
-    } else {
-        // Minimize
-        tablesPanel.classList.add('minimized');
-        toggleIcon.classList.remove('fa-minus');
-        toggleIcon.classList.add('fa-plus');
-        if (tablesList) tablesList.style.display = 'none';
-        if (tableSearch) tableSearch.style.display = 'none';
-        if (schemaSection) schemaSection.style.display = 'none';
+    if (!panel) return;
+    
+    const isMinimized = panel.classList.toggle('minimized');
+    
+    if (icon) {
+        icon.classList.remove('fa-minus', 'fa-plus');
+        icon.classList.add(isMinimized ? 'fa-plus' : 'fa-minus');
     }
+    
+    if (content) {
+        content.style.display = isMinimized ? 'none' : '';
+    }
+}
+
+// ================================================
+// Query Panel Toggle
+// ================================================
+
+function toggleQueryPanel() {
+    const panel = elements.queryPanel;
+    const content = elements.queryContent;
+    
+    if (!panel || !content) return;
+    
+    const isMinimized = panel.classList.toggle('minimized');
+    content.style.display = isMinimized ? 'none' : '';
+}
+
+// ================================================
+// Scroll Navigation Functions
+// ================================================
+
+function scrollToStart() {
+    const wrapper = elements.resultsWrapper;
+    if (wrapper) {
+        wrapper.scrollTo({ left: 0, behavior: 'smooth' });
+    }
+}
+
+function scrollToEnd() {
+    const wrapper = elements.resultsWrapper;
+    if (wrapper) {
+        wrapper.scrollTo({ left: wrapper.scrollWidth, behavior: 'smooth' });
+    }
+}
+
+function toggleFullscreen() {
+    const panel = elements.resultsPanel;
+    if (!panel) return;
+    
+    const isFullscreen = panel.classList.toggle('fullscreen');
+    
+    if (elements.fullscreenBtn) {
+        elements.fullscreenBtn.innerHTML = isFullscreen 
+            ? '<i class="fas fa-compress"></i> Exit Fullscreen'
+            : '<i class="fas fa-expand"></i> Fullscreen';
+    }
+    
+    // Hide/show bottom panels
+    const bottomPanels = document.querySelector('.bottom-panels');
+    if (bottomPanels) {
+        bottomPanels.style.display = isFullscreen ? 'none' : '';
+    }
+}
+
+// ================================================
+// Chart Functions
+// ================================================
+
+function showChart() {
+    if (!state.lastResults || state.lastResults.length === 0) {
+        showToast('No data available to chart', 'info');
+        return;
+    }
+    
+    elements.chartContainer.style.display = 'block';
+    renderChart();
+}
+
+function hideChart() {
+    elements.chartContainer.style.display = 'none';
+    if (state.currentChart) {
+        state.currentChart.destroy();
+        state.currentChart = null;
+    }
+}
+
+function renderChart() {
+    const data = state.lastResults;
+    const columns = state.lastColumns;
+    
+    if (!data || data.length === 0 || !columns) return;
+    
+    // Destroy existing chart
+    if (state.currentChart) {
+        state.currentChart.destroy();
+    }
+    
+    // Find suitable columns for charting
+    const chartData = analyzeDataForChart(data, columns);
+    
+    if (!chartData) {
+        showToast('Data not suitable for charting. Need numeric values.', 'info');
+        return;
+    }
+    
+    const ctx = elements.resultsChart.getContext('2d');
+    const chartType = elements.chartType.value;
+    
+    // Chart colors
+    const colors = [
+        'rgba(0, 240, 255, 0.8)',
+        'rgba(180, 0, 255, 0.8)',
+        'rgba(0, 255, 136, 0.8)',
+        'rgba(255, 107, 53, 0.8)',
+        'rgba(255, 51, 102, 0.8)',
+        'rgba(255, 204, 0, 0.8)',
+        'rgba(102, 126, 234, 0.8)',
+        'rgba(118, 75, 162, 0.8)'
+    ];
+    
+    const borderColors = colors.map(c => c.replace('0.8', '1'));
+    
+    state.currentChart = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels: chartData.labels.slice(0, 20), // Limit to 20 items
+            datasets: [{
+                label: chartData.valueColumn,
+                data: chartData.values.slice(0, 20),
+                backgroundColor: chartType === 'line' ? colors[0] : colors.slice(0, chartData.values.length),
+                borderColor: chartType === 'line' ? borderColors[0] : borderColors.slice(0, chartData.values.length),
+                borderWidth: 2,
+                tension: 0.4,
+                fill: chartType === 'line'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: chartType === 'pie' || chartType === 'doughnut',
+                    position: 'right',
+                    labels: {
+                        color: '#a0a0c0',
+                        font: { family: 'Rajdhani' }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: `${chartData.labelColumn} vs ${chartData.valueColumn}`,
+                    color: '#00f0ff',
+                    font: { family: 'Orbitron', size: 14 }
+                }
+            },
+            scales: chartType === 'pie' || chartType === 'doughnut' ? {} : {
+                x: {
+                    ticks: { color: '#a0a0c0', font: { family: 'Rajdhani' } },
+                    grid: { color: 'rgba(0, 240, 255, 0.1)' }
+                },
+                y: {
+                    ticks: { color: '#a0a0c0', font: { family: 'Rajdhani' } },
+                    grid: { color: 'rgba(0, 240, 255, 0.1)' }
+                }
+            }
+        }
+    });
+}
+
+function analyzeDataForChart(data, columns) {
+    // Find a numeric column for values
+    let valueColumn = null;
+    let labelColumn = null;
+    
+    // Priority columns for values (numeric)
+    const numericPriority = ['count', 'count_', 'sum', 'avg', 'min', 'max', 'value', 'total', 'duration', 'size', 'CounterValue', 'ResultCount'];
+    
+    // Find value column
+    for (const col of columns) {
+        const colLower = col.toLowerCase();
+        if (numericPriority.some(p => colLower.includes(p.toLowerCase()))) {
+            if (typeof data[0][col] === 'number') {
+                valueColumn = col;
+                break;
+            }
+        }
+    }
+    
+    // If no priority match, find first numeric column
+    if (!valueColumn) {
+        for (const col of columns) {
+            if (typeof data[0][col] === 'number') {
+                valueColumn = col;
+                break;
+            }
+        }
+    }
+    
+    if (!valueColumn) return null;
+    
+    // Find label column (prefer non-numeric, non-timestamp)
+    const labelPriority = ['name', 'type', 'category', 'computer', 'resource', 'level', 'status'];
+    
+    for (const col of columns) {
+        if (col === valueColumn) continue;
+        const colLower = col.toLowerCase();
+        if (labelPriority.some(p => colLower.includes(p))) {
+            labelColumn = col;
+            break;
+        }
+    }
+    
+    // If no priority match, find first string column
+    if (!labelColumn) {
+        for (const col of columns) {
+            if (col === valueColumn) continue;
+            if (col.toLowerCase().includes('time') || col.toLowerCase().includes('date')) continue;
+            if (typeof data[0][col] === 'string') {
+                labelColumn = col;
+                break;
+            }
+        }
+    }
+    
+    // Fall back to TimeGenerated or first column
+    if (!labelColumn) {
+        labelColumn = columns.find(c => c.toLowerCase().includes('time')) || columns[0];
+    }
+    
+    // Extract data
+    const labels = data.map(row => {
+        const val = row[labelColumn];
+        if (val instanceof Date) return val.toLocaleString();
+        if (typeof val === 'string' && val.length > 30) return val.substring(0, 30) + '...';
+        return String(val ?? 'N/A');
+    });
+    
+    const values = data.map(row => {
+        const val = row[valueColumn];
+        return typeof val === 'number' ? val : parseFloat(val) || 0;
+    });
+    
+    return { labels, values, labelColumn, valueColumn };
 }
 
 // ================================================
@@ -328,6 +610,10 @@ function displayKql(kql) {
 
 function displayResults(results, columns) {
     state.lastResults = results;
+    state.lastColumns = columns;
+    
+    // Hide chart when new results come in
+    hideChart();
     
     if (!results || results.length === 0) {
         showEmpty();
