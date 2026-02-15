@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <!-- Animated Background -->
@@ -122,6 +123,9 @@
                         <span class="row-count" id="rowCount">0 records</span>
                     </div>
                     <div class="panel-controls">
+                        <button class="control-btn" id="showChartBtn" title="Show Chart">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
                         <button class="control-btn" id="exportCsvBtn" title="Export CSV">
                             <i class="fas fa-file-csv"></i>
                         </button>
@@ -150,6 +154,25 @@
                             <div class="loader-ring"></div>
                         </div>
                         <p>PROCESSING QUANTUM DATA...</p>
+                    </div>
+
+                    <!-- Chart Container -->
+                    <div class="chart-container" id="chartContainer" style="display: none;">
+                        <div class="chart-header">
+                            <span class="chart-title">DATA VISUALIZATION</span>
+                            <div class="chart-controls">
+                                <select id="chartType" class="chart-select">
+                                    <option value="bar">Bar Chart</option>
+                                    <option value="line">Line Chart</option>
+                                    <option value="pie">Pie Chart</option>
+                                    <option value="doughnut">Doughnut</option>
+                                </select>
+                                <button class="control-btn" id="closeChartBtn" title="Close Chart">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <canvas id="resultsChart"></canvas>
                     </div>
 
                     <div class="results-table-wrapper" id="resultsWrapper" style="display: none;">
