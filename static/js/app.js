@@ -42,18 +42,31 @@ const elements = {
     rowCount: document.getElementById('rowCount'),
     exportCsvBtn: document.getElementById('exportCsvBtn'),
     exportJsonBtn: document.getElementById('exportJsonBtn'),
+    generateReportBtn: document.getElementById('generateReportBtn'),
     
     // Scroll Navigation
     scrollStartBtn: document.getElementById('scrollStartBtn'),
     scrollEndBtn: document.getElementById('scrollEndBtn'),
     fullscreenBtn: document.getElementById('fullscreenBtn'),
     
-    // Charts
-    chartContainer: document.getElementById('chartContainer'),
+    // Visualization Dropdown
+    vizDropdown: document.getElementById('vizDropdown'),
+    vizDropdownBtn: document.getElementById('vizDropdownBtn'),
+    vizDropdownMenu: document.getElementById('vizDropdownMenu'),
+    
+    // Visualization Container
+    vizContainer: document.getElementById('vizContainer'),
+    vizTitle: document.getElementById('vizTitle'),
     resultsChart: document.getElementById('resultsChart'),
     chartType: document.getElementById('chartType'),
-    showChartBtn: document.getElementById('showChartBtn'),
-    closeChartBtn: document.getElementById('closeChartBtn'),
+    dataColumn: document.getElementById('dataColumn'),
+    closeVizBtn: document.getElementById('closeVizBtn'),
+    
+    // Statistics Container
+    statsContainer: document.getElementById('statsContainer'),
+    statsTitle: document.getElementById('statsTitle'),
+    statsContent: document.getElementById('statsContent'),
+    closeStatsBtn: document.getElementById('closeStatsBtn'),
     
     // Tables
     tablesList: document.getElementById('tablesList'),
@@ -167,12 +180,33 @@ function setupEventListeners() {
         elements.fullscreenBtn.addEventListener('click', toggleFullscreen);
     }
     
-    // Chart controls
-    if (elements.showChartBtn) {
-        elements.showChartBtn.addEventListener('click', showChart);
+    // Visualization Dropdown
+    if (elements.vizDropdownBtn) {
+        elements.vizDropdownBtn.addEventListener('click', toggleVizDropdown);
     }
-    if (elements.closeChartBtn) {
-        elements.closeChartBtn.addEventListener('click', hideChart);
+    
+    // Dropdown items
+    document.querySelectorAll('.dropdown-item[data-viz]').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const vizType = e.currentTarget.getAttribute('data-viz');
+            handleVisualization(vizType);
+            closeVizDropdown();
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.dropdown')) {
+            closeVizDropdown();
+        }
+    });
+    
+    // Visualization controls
+    if (elements.closeVizBtn) {
+        elements.closeVizBtn.addEventListener('click', hideVisualization);
+    }
+    if (elements.closeStatsBtn) {
+        elements.closeStatsBtn.addEventListener('click', hideStats);
     }
     if (elements.chartType) {
         elements.chartType.addEventListener('change', () => {
@@ -180,6 +214,18 @@ function setupEventListeners() {
                 renderChart();
             }
         });
+    }
+    if (elements.dataColumn) {
+        elements.dataColumn.addEventListener('change', () => {
+            if (state.lastResults && state.lastResults.length > 0) {
+                renderChart();
+            }
+        });
+    }
+    
+    // Generate Report
+    if (elements.generateReportBtn) {
+        elements.generateReportBtn.addEventListener('click', generatePDFReport);
     }
 }
 
@@ -246,8 +292,8 @@ function toggleFullscreen() {
     
     if (elements.fullscreenBtn) {
         elements.fullscreenBtn.innerHTML = isFullscreen 
-            ? '<i class="fas fa-compress"></i> Exit Fullscreen'
-            : '<i class="fas fa-expand"></i> Fullscreen';
+            ? '<i class="fas fa-compress"></i>'
+            : '<i class="fas fa-expand"></i>';
     }
     
     // Hide/show bottom panels
@@ -258,25 +304,125 @@ function toggleFullscreen() {
 }
 
 // ================================================
-// Chart Functions
+// Visualization Dropdown Functions
 // ================================================
 
-function showChart() {
+function toggleVizDropdown() {
+    const menu = elements.vizDropdownMenu;
+    if (menu) {
+        menu.classList.toggle('show');
+    }
+}
+
+function closeVizDropdown() {
+    const menu = elements.vizDropdownMenu;
+    if (menu) {
+        menu.classList.remove('show');
+    }
+}
+
+function handleVisualization(vizType) {
     if (!state.lastResults || state.lastResults.length === 0) {
-        showToast('No data available to chart', 'info');
+        showToast('No data available for visualization', 'info');
         return;
     }
     
-    elements.chartContainer.style.display = 'block';
+    switch(vizType) {
+        case 'bar':
+        case 'line':
+        case 'pie':
+        case 'doughnut':
+        case 'area':
+            showVisualization(vizType);
+            break;
+        case 'trend':
+            showTrendAnalysis();
+            break;
+        case 'timeline':
+            showTimeline();
+            break;
+        case 'heatmap':
+            showHeatmap();
+            break;
+        case 'summary':
+            showSummaryReport();
+            break;
+        case 'stats':
+            showStatistics();
+            break;
+        default:
+            showVisualization('bar');
+    }
+}
+
+// ================================================
+// Chart/Visualization Functions
+// ================================================
+
+function showVisualization(chartType = 'bar') {
+    if (!state.lastResults || state.lastResults.length === 0) {
+        showToast('No data available to visualize', 'info');
+        return;
+    }
+    
+    // Hide other containers
+    hideStats();
+    elements.resultsWrapper.style.display = 'none';
+    
+    // Populate column selector
+    populateColumnSelector();
+    
+    // Set chart type
+    if (elements.chartType) {
+        elements.chartType.value = chartType;
+    }
+    
+    // Show viz container
+    elements.vizContainer.style.display = 'flex';
+    elements.vizTitle.textContent = chartType.toUpperCase() + ' CHART';
+    
     renderChart();
 }
 
-function hideChart() {
-    elements.chartContainer.style.display = 'none';
+function hideVisualization() {
+    elements.vizContainer.style.display = 'none';
     if (state.currentChart) {
         state.currentChart.destroy();
         state.currentChart = null;
     }
+    elements.resultsWrapper.style.display = 'block';
+}
+
+function populateColumnSelector() {
+    const columns = state.lastColumns;
+    if (!columns || !elements.dataColumn) return;
+    
+    elements.dataColumn.innerHTML = '';
+    
+    // Find numeric and date columns
+    const data = state.lastResults;
+    columns.forEach(col => {
+        const option = document.createElement('option');
+        option.value = col;
+        option.textContent = col;
+        elements.dataColumn.appendChild(option);
+    });
+    
+    // Auto-select a numeric column if available
+    const numericCol = findNumericColumn(data, columns);
+    if (numericCol) {
+        elements.dataColumn.value = numericCol;
+    }
+}
+
+function findNumericColumn(data, columns) {
+    for (const col of columns) {
+        const values = data.slice(0, 10).map(row => row[col]);
+        if (values.some(v => typeof v === 'number' || !isNaN(parseFloat(v)))) {
+            return col;
+        }
+    }
+    return columns[0];
 }
 
 function renderChart() {
@@ -290,8 +436,11 @@ function renderChart() {
         state.currentChart.destroy();
     }
     
+    // Get selected column or find suitable one
+    const selectedColumn = elements.dataColumn?.value || findNumericColumn(data, columns);
+    
     // Find suitable columns for charting
-    const chartData = analyzeDataForChart(data, columns);
+    const chartData = analyzeDataForChart(data, columns, selectedColumn);
     
     if (!chartData) {
         showToast('Data not suitable for charting. Need numeric values.', 'info');
@@ -299,7 +448,11 @@ function renderChart() {
     }
     
     const ctx = elements.resultsChart.getContext('2d');
-    const chartType = elements.chartType.value;
+    let chartType = elements.chartType?.value || 'bar';
+    
+    // Convert area to line with fill
+    const isArea = chartType === 'area';
+    if (isArea) chartType = 'line';
     
     // Chart colors
     const colors = [
@@ -318,15 +471,19 @@ function renderChart() {
     state.currentChart = new Chart(ctx, {
         type: chartType,
         data: {
-            labels: chartData.labels.slice(0, 20), // Limit to 20 items
+            labels: chartData.labels.slice(0, 50), // Limit to 50 items
             datasets: [{
                 label: chartData.valueColumn,
-                data: chartData.values.slice(0, 20),
-                backgroundColor: chartType === 'line' ? colors[0] : colors.slice(0, chartData.values.length),
+                data: chartData.values.slice(0, 50),
+                backgroundColor: chartType === 'line' 
+                    ? (isArea ? 'rgba(0, 240, 255, 0.3)' : colors[0]) 
+                    : colors.slice(0, chartData.values.length),
                 borderColor: chartType === 'line' ? borderColors[0] : borderColors.slice(0, chartData.values.length),
                 borderWidth: 2,
                 tension: 0.4,
-                fill: chartType === 'line'
+                fill: isArea,
+                pointRadius: chartType === 'line' ? 3 : undefined,
+                pointHoverRadius: chartType === 'line' ? 6 : undefined
             }]
         },
         options: {
@@ -350,7 +507,7 @@ function renderChart() {
             },
             scales: chartType === 'pie' || chartType === 'doughnut' ? {} : {
                 x: {
-                    ticks: { color: '#a0a0c0', font: { family: 'Rajdhani' } },
+                    ticks: { color: '#a0a0c0', font: { family: 'Rajdhani' }, maxRotation: 45 },
                     grid: { color: 'rgba(0, 240, 255, 0.1)' }
                 },
                 y: {
@@ -362,21 +519,29 @@ function renderChart() {
     });
 }
 
-function analyzeDataForChart(data, columns) {
+function analyzeDataForChart(data, columns, preferredColumn = null) {
     // Find a numeric column for values
-    let valueColumn = null;
+    let valueColumn = preferredColumn;
     let labelColumn = null;
     
     // Priority columns for values (numeric)
     const numericPriority = ['count', 'count_', 'sum', 'avg', 'min', 'max', 'value', 'total', 'duration', 'size', 'CounterValue', 'ResultCount'];
     
-    // Find value column
-    for (const col of columns) {
-        const colLower = col.toLowerCase();
-        if (numericPriority.some(p => colLower.includes(p.toLowerCase()))) {
-            if (typeof data[0][col] === 'number') {
-                valueColumn = col;
-                break;
+    // Verify preferred column is numeric or find one
+    if (valueColumn) {
+        const hasNumeric = data.some(row => typeof row[valueColumn] === 'number' || !isNaN(parseFloat(row[valueColumn])));
+        if (!hasNumeric) valueColumn = null;
+    }
+    
+    // Find value column if not set
+    if (!valueColumn) {
+        for (const col of columns) {
+            const colLower = col.toLowerCase();
+            if (numericPriority.some(p => colLower.includes(p.toLowerCase()))) {
+                if (typeof data[0][col] === 'number') {
+                    valueColumn = col;
+                    break;
+                }
             }
         }
     }
@@ -436,6 +601,333 @@ function analyzeDataForChart(data, columns) {
     });
     
     return { labels, values, labelColumn, valueColumn };
+}
+
+// ================================================
+// Statistics & Report Functions
+// ================================================
+
+function showStatistics() {
+    const data = state.lastResults;
+    const columns = state.lastColumns;
+    
+    if (!data || data.length === 0) {
+        showToast('No data available', 'info');
+        return;
+    }
+    
+    // Hide other containers
+    hideVisualization();
+    elements.resultsWrapper.style.display = 'none';
+    
+    // Calculate statistics
+    const stats = calculateStatistics(data, columns);
+    
+    // Build stats HTML
+    let html = `
+        <div class="stat-box">
+            <i class="stat-box-icon fas fa-database"></i>
+            <span class="stat-box-value">${data.length}</span>
+            <span class="stat-box-label">Total Records</span>
+        </div>
+        <div class="stat-box">
+            <i class="stat-box-icon fas fa-columns"></i>
+            <span class="stat-box-value">${columns.length}</span>
+            <span class="stat-box-label">Columns</span>
+        </div>
+    `;
+    
+    // Add numeric column stats
+    for (const stat of stats.numericStats) {
+        html += `
+            <div class="stat-box">
+                <i class="stat-box-icon fas fa-calculator"></i>
+                <span class="stat-box-value">${stat.avg.toFixed(2)}</span>
+                <span class="stat-box-label">${stat.column} (Avg)</span>
+            </div>
+            <div class="stat-box">
+                <i class="stat-box-icon fas fa-arrow-up"></i>
+                <span class="stat-box-value">${stat.max.toFixed(2)}</span>
+                <span class="stat-box-label">${stat.column} (Max)</span>
+            </div>
+            <div class="stat-box">
+                <i class="stat-box-icon fas fa-arrow-down"></i>
+                <span class="stat-box-value">${stat.min.toFixed(2)}</span>
+                <span class="stat-box-label">${stat.column} (Min)</span>
+            </div>
+        `;
+    }
+    
+    // Add category breakdowns
+    for (const cat of stats.categoryStats) {
+        html += `
+            <div class="summary-section">
+                <h4><i class="fas fa-tags"></i> ${cat.column} Distribution</h4>
+                <table class="summary-table">
+                    <tr><th>Value</th><th>Count</th><th>Percentage</th></tr>
+                    ${cat.values.slice(0, 10).map(v => `
+                        <tr>
+                            <td>${v.value}</td>
+                            <td>${v.count}</td>
+                            <td>${((v.count / data.length) * 100).toFixed(1)}%</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            </div>
+        `;
+    }
+    
+    elements.statsContent.innerHTML = html;
+    elements.statsContainer.style.display = 'flex';
+    elements.statsTitle.textContent = 'DATA STATISTICS';
+}
+
+function hideStats() {
+    if (elements.statsContainer) {
+        elements.statsContainer.style.display = 'none';
+    }
+}
+
+function calculateStatistics(data, columns) {
+    const numericStats = [];
+    const categoryStats = [];
+    
+    for (const col of columns) {
+        const values = data.map(row => row[col]).filter(v => v !== null && v !== undefined);
+        
+        // Check if numeric
+        const numericValues = values.filter(v => typeof v === 'number' || !isNaN(parseFloat(v))).map(v => parseFloat(v));
+        
+        if (numericValues.length > 0 && numericValues.length === values.length) {
+            numericStats.push({
+                column: col,
+                min: Math.min(...numericValues),
+                max: Math.max(...numericValues),
+                avg: numericValues.reduce((a, b) => a + b, 0) / numericValues.length,
+                sum: numericValues.reduce((a, b) => a + b, 0)
+            });
+        } else if (values.length > 0) {
+            // Category column
+            const counts = {};
+            values.forEach(v => {
+                const key = String(v).substring(0, 50);
+                counts[key] = (counts[key] || 0) + 1;
+            });
+            
+            const uniqueValues = Object.keys(counts).length;
+            if (uniqueValues <= 20 && uniqueValues > 1) {
+                categoryStats.push({
+                    column: col,
+                    values: Object.entries(counts)
+                        .map(([value, count]) => ({ value, count }))
+                        .sort((a, b) => b.count - a.count)
+                });
+            }
+        }
+    }
+    
+    return { numericStats: numericStats.slice(0, 5), categoryStats: categoryStats.slice(0, 3) };
+}
+
+function showSummaryReport() {
+    const data = state.lastResults;
+    const columns = state.lastColumns;
+    
+    if (!data || data.length === 0) {
+        showToast('No data available', 'info');
+        return;
+    }
+    
+    // Hide other containers
+    hideVisualization();
+    elements.resultsWrapper.style.display = 'none';
+    
+    const stats = calculateStatistics(data, columns);
+    
+    // Build summary report
+    let html = `
+        <div class="summary-section">
+            <h4><i class="fas fa-file-alt"></i> QUERY SUMMARY REPORT</h4>
+            <table class="summary-table">
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Total Records</td><td>${data.length}</td></tr>
+                <tr><td>Total Columns</td><td>${columns.length}</td></tr>
+                <tr><td>Generated At</td><td>${new Date().toLocaleString()}</td></tr>
+            </table>
+        </div>
+    `;
+    
+    if (stats.numericStats.length > 0) {
+        html += `
+            <div class="summary-section">
+                <h4><i class="fas fa-chart-bar"></i> NUMERIC ANALYSIS</h4>
+                <table class="summary-table">
+                    <tr><th>Column</th><th>Min</th><th>Max</th><th>Average</th><th>Sum</th></tr>
+                    ${stats.numericStats.map(s => `
+                        <tr>
+                            <td>${s.column}</td>
+                            <td>${s.min.toFixed(2)}</td>
+                            <td>${s.max.toFixed(2)}</td>
+                            <td>${s.avg.toFixed(2)}</td>
+                            <td>${s.sum.toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            </div>
+        `;
+    }
+    
+    for (const cat of stats.categoryStats) {
+        html += `
+            <div class="summary-section">
+                <h4><i class="fas fa-tags"></i> ${cat.column.toUpperCase()} BREAKDOWN</h4>
+                <table class="summary-table">
+                    <tr><th>Value</th><th>Count</th><th>Percentage</th></tr>
+                    ${cat.values.slice(0, 10).map(v => `
+                        <tr>
+                            <td>${v.value}</td>
+                            <td>${v.count}</td>
+                            <td>${((v.count / data.length) * 100).toFixed(1)}%</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            </div>
+        `;
+    }
+    
+    elements.statsContent.innerHTML = html;
+    elements.statsContainer.style.display = 'flex';
+    elements.statsTitle.textContent = 'SUMMARY REPORT';
+}
+
+function showTrendAnalysis() {
+    const data = state.lastResults;
+    const columns = state.lastColumns;
+    
+    // Find time column
+    const timeCol = columns.find(c => c.toLowerCase().includes('time') || c.toLowerCase().includes('date'));
+    
+    if (!timeCol) {
+        showToast('No timestamp column found for trend analysis', 'info');
+        return;
+    }
+    
+    // Set up for line chart
+    if (elements.chartType) {
+        elements.chartType.value = 'line';
+    }
+    
+    showVisualization('line');
+    elements.vizTitle.textContent = 'TREND ANALYSIS';
+}
+
+function showTimeline() {
+    showVisualization('line');
+    elements.vizTitle.textContent = 'TIMELINE VIEW';
+}
+
+function showHeatmap() {
+    // For now, show statistics as heatmap isn't directly supported
+    showStatistics();
+    elements.statsTitle.textContent = 'ACTIVITY HEATMAP (Data Distribution)';
+    showToast('Heatmap view shows data distribution', 'info');
+}
+
+function generatePDFReport() {
+    if (!state.lastResults || state.lastResults.length === 0) {
+        showToast('No data available to generate report', 'info');
+        return;
+    }
+    
+    // Create printable report
+    const data = state.lastResults;
+    const columns = state.lastColumns;
+    const stats = calculateStatistics(data, columns);
+    
+    const reportWindow = window.open('', '_blank');
+    reportWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Azure Log Analysis Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+                h1 { color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 10px; }
+                h2 { color: #0078d4; margin-top: 30px; }
+                table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                th { background: #0078d4; color: white; }
+                tr:nth-child(even) { background: #f9f9f9; }
+                .meta { color: #666; font-size: 0.9em; }
+                .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+                .stat-card { background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center; }
+                .stat-value { font-size: 24px; font-weight: bold; color: #0078d4; }
+                .stat-label { color: #666; font-size: 0.85em; }
+                @media print { body { margin: 20px; } }
+            </style>
+        </head>
+        <body>
+            <h1>🔍 Azure Log Analysis Report</h1>
+            <p class="meta">Generated: ${new Date().toLocaleString()}</p>
+            
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-value">${data.length}</div>
+                    <div class="stat-label">Total Records</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${columns.length}</div>
+                    <div class="stat-label">Columns</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.numericStats.length}</div>
+                    <div class="stat-label">Numeric Fields</div>
+                </div>
+            </div>
+            
+            ${stats.numericStats.length > 0 ? `
+                <h2>📊 Numeric Analysis</h2>
+                <table>
+                    <tr><th>Column</th><th>Min</th><th>Max</th><th>Average</th><th>Sum</th></tr>
+                    ${stats.numericStats.map(s => `
+                        <tr>
+                            <td>${s.column}</td>
+                            <td>${s.min.toFixed(2)}</td>
+                            <td>${s.max.toFixed(2)}</td>
+                            <td>${s.avg.toFixed(2)}</td>
+                            <td>${s.sum.toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            ` : ''}
+            
+            ${stats.categoryStats.map(cat => `
+                <h2>📋 ${cat.column} Distribution</h2>
+                <table>
+                    <tr><th>Value</th><th>Count</th><th>Percentage</th></tr>
+                    ${cat.values.slice(0, 15).map(v => `
+                        <tr>
+                            <td>${v.value}</td>
+                            <td>${v.count}</td>
+                            <td>${((v.count / data.length) * 100).toFixed(1)}%</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            `).join('')}
+            
+            <h2>📝 Data Preview (First 20 Records)</h2>
+            <table>
+                <tr>${columns.map(c => `<th>${c}</th>`).join('')}</tr>
+                ${data.slice(0, 20).map(row => `
+                    <tr>${columns.map(c => `<td>${String(row[c] ?? '').substring(0, 50)}</td>`).join('')}</tr>
+                `).join('')}
+            </table>
+            
+            <script>window.print();</script>
+        </body>
+        </html>
+    `);
+    reportWindow.document.close();
 }
 
 // ================================================

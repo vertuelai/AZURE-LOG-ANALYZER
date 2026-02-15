@@ -327,14 +327,18 @@ body {
     flex: 1;
     gap: var(--spacing-md);
     min-height: 0;
+    height: calc(100vh - 220px); /* Fixed height to prevent overflow */
+    overflow: hidden;
 }
 
-/* Results Panel - Full Width Top */
+/* Results Panel - Full Width Top with Fixed Height */
 .results-panel {
     flex: 1;
-    min-height: 300px;
+    min-height: 200px;
+    max-height: calc(100% - 280px); /* Leave room for bottom panels */
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .results-panel.fullscreen {
@@ -346,6 +350,16 @@ body {
     z-index: 1000;
     border-radius: 0;
     margin: 0;
+    max-height: 100vh;
+}
+
+/* Results container needs to fill available space */
+.results-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Bottom Panels - Query & Data Sources */
@@ -353,12 +367,15 @@ body {
     display: grid;
     grid-template-columns: 1fr 300px;
     gap: var(--spacing-md);
-    max-height: 350px;
-    transition: max-height 0.3s ease;
+    height: 260px;
+    min-height: 260px;
+    flex-shrink: 0; /* Prevent shrinking */
+    transition: height 0.3s ease;
 }
 
 .bottom-panels.minimized {
-    max-height: 50px;
+    height: 50px;
+    min-height: 50px;
 }
 
 /* Query Panel */
@@ -725,16 +742,7 @@ body {
    Results Panel
    ================================================ */
 
-.results-panel {
-    min-height: 500px;
-}
-
-.results-container {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
+/* Note: results-panel and results-container are defined in the Content Layout section */
 
 .empty-state,
 .loading-state {
@@ -822,12 +830,13 @@ body {
     50% { opacity: 0.5; }
 }
 
-/* Results Table */
+/* Results Table - Freeze Panes Style */
 .results-table-wrapper {
     flex: 1;
     overflow: auto;
-    padding: var(--spacing-md);
+    padding: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
     scroll-behavior: smooth;
+    min-height: 0; /* Important for flex child scrolling */
 }
 
 .results-table {
@@ -840,6 +849,7 @@ body {
 .results-table th {
     position: sticky;
     top: 0;
+    z-index: 10; /* Keep header above scrolling content */
     background: var(--bg-dark);
     padding: var(--spacing-md);
     text-align: left;
@@ -851,7 +861,7 @@ body {
     border-bottom: 2px solid var(--primary);
     white-space: nowrap;
     min-width: 120px;
-}
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); /* Visual separator */
 
 .results-table td {
     padding: var(--spacing-md);
@@ -926,7 +936,264 @@ body {
 }
 
 /* ================================================
-   Chart Container
+   Control Divider & Dropdown
+   ================================================ */
+
+.control-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border-color);
+    margin: 0 var(--spacing-xs);
+}
+
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.dropdown-toggle .btn-label {
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+}
+
+.dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    min-width: 180px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-xs) 0;
+    z-index: 1000;
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(10px);
+    margin-top: var(--spacing-xs);
+}
+
+.dropdown-menu.show {
+    display: block;
+    animation: dropdownFade 0.2s ease;
+}
+
+@keyframes dropdownFade {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    color: var(--primary);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: var(--spacing-xs) 0;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: left;
+}
+
+.dropdown-item:hover {
+    background: rgba(0, 240, 255, 0.1);
+    color: var(--primary);
+}
+
+.dropdown-item i {
+    width: 16px;
+    text-align: center;
+}
+
+/* ================================================
+   Visualization Container
+   ================================================ */
+
+.viz-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-md);
+    padding: var(--spacing-md);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+    max-height: 100%;
+}
+
+.viz-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.viz-title {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--primary);
+    letter-spacing: 2px;
+}
+
+.viz-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.viz-content {
+    flex: 1;
+    position: relative;
+    min-height: 200px;
+}
+
+.viz-content canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ================================================
+   Statistics Container
+   ================================================ */
+
+.stats-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-md);
+    padding: var(--spacing-md);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.stats-title {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--primary);
+    letter-spacing: 2px;
+}
+
+.stats-content {
+    flex: 1;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm);
+}
+
+.stat-box {
+    background: rgba(0, 240, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.stat-box-icon {
+    font-size: 1.5rem;
+    color: var(--primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.stat-box-value {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.stat-box-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+/* Summary Report Styles */
+.summary-section {
+    grid-column: 1 / -1;
+    background: rgba(180, 0, 255, 0.05);
+    border: 1px solid var(--secondary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.summary-section h4 {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--secondary);
+    margin-bottom: var(--spacing-md);
+    letter-spacing: 2px;
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.summary-table th,
+.summary-table td {
+    padding: var(--spacing-sm);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.summary-table th {
+    color: var(--primary);
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+}
+
+.summary-table td {
+    color: var(--text-secondary);
+}
+
+/* ================================================
+   Chart Container (Legacy Support)
    ================================================ */
 
 .chart-container {
