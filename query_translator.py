@@ -12,8 +12,22 @@ class QueryTranslator:
     
     SYSTEM_PROMPT = """You are an expert KQL (Kusto Query Language) translator for Azure Log Analytics. Your ONLY job is to convert natural language into valid KQL queries.
 
-## CRITICAL INSTRUCTION:
-When the user specifies a TABLE NAME explicitly (like "AppServiceHTTPLogs", "SigninLogs", etc.), you MUST use that exact table. Do not substitute with a different table.
+## CRITICAL INSTRUCTIONS:
+1. When the user specifies a TABLE NAME explicitly (like "AppServiceHTTPLogs", "SigninLogs", etc.), you MUST use that exact table.
+2. When the user asks about VIRTUAL MACHINE availability/health/status, use the Heartbeat table and filter by Computer name.
+3. Do NOT confuse "availability" of VMs/computers with "AppAvailabilityResults" which is for Application Insights web tests.
+
+## TABLE SELECTION GUIDE:
+| User asks about... | Correct Table | Key Column |
+|-------------------|---------------|------------|
+| VM availability/health | Heartbeat | Computer |
+| VM status/uptime | Heartbeat | Computer |
+| Computer heartbeat | Heartbeat | Computer |
+| Machine availability | Heartbeat | Computer |
+| Server health | Heartbeat | Computer |
+| Web test results | AppAvailabilityResults | Name |
+| URL availability test | AppAvailabilityResults | Name |
+| Ping test | AppAvailabilityResults | Name |
 
 ## KQL OPERATORS REFERENCE:
 
@@ -150,14 +164,25 @@ When the user specifies a TABLE NAME explicitly (like "AppServiceHTTPLogs", "Sig
 | AppServiceConsoleLogs | ResultDescription, Host, Level |
 | AppServiceAppLogs | CustomLevel, Message, Host, StackTrace |
 
-### Application Insights
-| Table | Key Columns |
-|-------|------------|
-| AppRequests | Url, Name, ResultCode, DurationMs, Success, ClientIP, ClientCity, ClientCountryOrRegion |
-| AppExceptions | ExceptionType, Message, OuterMessage, InnermostMessage, Method, Assembly |
-| AppTraces | Message, SeverityLevel, OperationName |
-| AppDependencies | Name, Target, DependencyType, Data, Duration, Success, ResultCode |
-| AppEvents | Name, Properties, Measurements |
+### Virtual Machines, Computers & Availability
+| Table | Use Case | Key Columns |
+|-------|----------|-------------|
+| Heartbeat | VM/computer availability, health, uptime | Computer, OSType, Version, ComputerIP, ComputerEnvironment, RemoteIPCountry |
+| Perf | CPU, memory, disk performance | Computer, ObjectName, CounterName, InstanceName, CounterValue |
+| Event | Windows event logs | Computer, EventLog, EventLevelName, EventID, RenderedDescription, UserName |
+| VMComputer | VM inventory | Computer, Ipv4Addresses, OperatingSystemFullName |
+| VMConnection | VM network connections | Computer, SourceIp, DestinationIp, DestinationPort |
+| InsightsMetrics | VM metrics/insights | Computer, Name, Val, Tags |
+
+### Application Insights (NOT for VM availability!)
+| Table | Use Case | Key Columns |
+|-------|----------|-------------|
+| AppAvailabilityResults | Web URL/ping test results (NOT VM health!) | Name, Location, Success, Message, Duration |
+| AppRequests | HTTP requests to your app | Url, Name, ResultCode, DurationMs, Success, ClientIP |
+| AppExceptions | Application exceptions/errors | ExceptionType, Message, OuterMessage, Method |
+| AppTraces | Application trace logs | Message, SeverityLevel, OperationName |
+| AppDependencies | External dependencies | Name, Target, DependencyType, Duration, Success |
+| AppEvents | Custom events | Name, Properties, Measurements |
 
 ### Security & Identity
 | Table | Key Columns |
@@ -172,13 +197,6 @@ When the user specifies a TABLE NAME explicitly (like "AppServiceHTTPLogs", "Sig
 |-------|------------|
 | AzureActivity | Caller, CallerIpAddress, OperationNameValue, ResourceGroup, ResourceProviderValue, ActivityStatusValue, Level |
 
-### Virtual Machines & Performance
-| Table | Key Columns |
-|-------|------------|
-| Heartbeat | Computer, OSType, Version, ComputerIP, RemoteIPCountry |
-| Perf | Computer, ObjectName, CounterName, InstanceName, CounterValue |
-| Event | Computer, EventLog, EventLevelName, EventID, RenderedDescription, UserName |
-
 ### Containers & Kubernetes  
 | Table | Key Columns |
 |-------|------------|
@@ -187,6 +205,12 @@ When the user specifies a TABLE NAME explicitly (like "AppServiceHTTPLogs", "Sig
 | KubePodInventory | Name, Namespace, PodStatus, PodIp, ClusterName, ServiceName |
 
 ## COMMON QUERY PATTERNS:
+
+### VM/Computer Availability (use Heartbeat table!)
+Heartbeat | where Computer == "VMName" | where TimeGenerated > ago(24h) | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType | order by LastHeartbeat desc
+Heartbeat | where Computer contains "VMName" | summarize LastHeartbeat=max(TimeGenerated) by Computer | order by LastHeartbeat desc
+Heartbeat | where Computer =~ "vmname" | where TimeGenerated > ago(1h) | project TimeGenerated, Computer, OSType, ComputerIP, Version
+Heartbeat | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer | extend MinutesSinceLastHeartbeat = datetime_diff('minute', now(), LastHeartbeat) | where MinutesSinceLastHeartbeat > 5
 
 ### Filter by specific field value
 TableName | where FieldName == "value"
@@ -304,12 +328,15 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
         "disk": "Perf | where ObjectName == 'LogicalDisk' and CounterName == '% Free Space' | where TimeGenerated > ago(1h) | summarize AvgFreeSpace=avg(CounterValue) by Computer, InstanceName, bin(TimeGenerated, 5m) | order by TimeGenerated desc",
         "disk usage": "Perf | where ObjectName == 'LogicalDisk' and CounterName == '% Free Space' | where TimeGenerated > ago(1h) | summarize AvgFreeSpace=avg(CounterValue) by Computer, InstanceName, bin(TimeGenerated, 5m) | order by TimeGenerated desc",
         
-        # VMs and Heartbeat
-        "heartbeat": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer, OSType, Version | order by LastHeartbeat desc | take 100",
-        "vm health": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer, OSType | order by LastHeartbeat desc | take 100",
-        "virtual machines": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer, OSType, ComputerEnvironment | order by LastHeartbeat desc | take 100",
-        "vms": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer, OSType | order by LastHeartbeat desc | take 100",
-        "computers": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer, OSType | order by LastHeartbeat desc | take 100",
+        # VMs and Heartbeat - IMPORTANT: This is for VM availability, NOT web tests!
+        "heartbeat": "Heartbeat | where TimeGenerated > ago(24h) | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType, ComputerEnvironment | order by LastHeartbeat desc | take 100",
+        "vm health": "Heartbeat | where TimeGenerated > ago(24h) | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType | order by LastHeartbeat desc | take 100",
+        "virtual machines": "Heartbeat | where TimeGenerated > ago(24h) | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType, ComputerEnvironment | order by LastHeartbeat desc | take 100",
+        "vms": "Heartbeat | where TimeGenerated > ago(24h) | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType | order by LastHeartbeat desc | take 100",
+        "computers": "Heartbeat | where TimeGenerated > ago(24h) | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType | order by LastHeartbeat desc | take 100",
+        "servers": "Heartbeat | where TimeGenerated > ago(24h) | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType | order by LastHeartbeat desc | take 100",
+        "offline vms": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer | where LastHeartbeat < ago(15m) | order by LastHeartbeat asc",
+        "offline machines": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer | where LastHeartbeat < ago(15m) | order by LastHeartbeat asc",
         
         # Containers and Kubernetes
         "container": "ContainerLog | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
@@ -334,7 +361,11 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
         "traces": "AppTraces | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
         "dependencies": "AppDependencies | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
         "page views": "AppPageViews | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
-        "availability": "AppAvailabilityResults | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "web test": "AppAvailabilityResults | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "web tests": "AppAvailabilityResults | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "availability test": "AppAvailabilityResults | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "url test": "AppAvailabilityResults | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "ping test": "AppAvailabilityResults | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
         
         # Diagnostics
         "diagnostics": "AzureDiagnostics | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
@@ -389,54 +420,64 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
         """
         Translate natural language to KQL.
         
+        STRATEGY: AI-FIRST approach
+        1. If AI is available, ALWAYS use AI translation for any meaningful query
+        2. Only use pattern matching/shortcuts for trivial single-word queries OR as fallback
+        
         Args:
             natural_language_query: The query in natural language
             available_tables: List of available tables in the workspace
             
         Returns:
             KQL query string
-            
-        Raises:
-            ValueError: If Azure OpenAI is not configured
         """
-        # Check for common query shortcuts (case insensitive)
         query_lower = natural_language_query.lower().strip()
         
-        # Check if query has filter conditions (contains filter keywords or IP addresses)
-        has_ip_address = bool(re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', query_lower))
-        has_filter_keywords = any(word in query_lower for word in [
-            'filter', 'where', 'from ip', 'from user', 'only', 'specific', 
-            'between', 'greater than', 'less than', 'contains', 'equals',
-            'status', 'code', 'response', 'error code', 'ip address', 'client ip',
-            'source', 'destination', 'user agent', 'method',
-            'exclude', 'include', 'matching', 'like', 'starting with', 'ending with',
-            'top', 'last', 'first', 'count', 'sum', 'average', 'group by',
-            'user', 'email', 'path', 'url', 'uri', 'endpoint'
-        ])
-        # Also check for HTTP methods as standalone words
-        has_http_method = any(f' {method} ' in f' {query_lower} ' for method in ['get', 'post', 'put', 'delete', 'patch'])
-        has_filter_conditions = has_ip_address or has_filter_keywords or has_http_method
+        # If AI is available, use AI for ALL queries that aren't trivial shortcuts
+        if self.client:
+            # Only use shortcuts for exact single-word matches like "errors", "logins"
+            # that don't have any specific filters or entity names
+            words = query_lower.split()
+            is_simple_shortcut = (
+                len(words) <= 2 and 
+                query_lower in self.COMMON_QUERIES and
+                not self._has_specific_entities(query_lower)
+            )
+            
+            if not is_simple_shortcut:
+                # Use AI for everything else
+                return self._ai_translate(natural_language_query, available_tables)
         
-        # Direct match first - only use if query is simple (no filter conditions)
-        if query_lower in self.COMMON_QUERIES and not has_filter_conditions:
+        # AI not available or simple shortcut - use pattern matching
+        # Direct exact match
+        if query_lower in self.COMMON_QUERIES:
             return self.COMMON_QUERIES[query_lower]
         
-        # If query has filter conditions, always prefer AI translation
-        if has_filter_conditions and self.client:
-            return self._ai_translate(natural_language_query, available_tables)
+        # Partial match for keywords
+        for keyword, kql in self.COMMON_QUERIES.items():
+            if keyword in query_lower and len(keyword) > 3:  # Only match keywords > 3 chars
+                return kql
         
-        # Partial match - only for simple queries without filter conditions
-        if not has_filter_conditions:
-            for keyword, kql in self.COMMON_QUERIES.items():
-                if keyword in query_lower:
-                    return kql
+        # Fall back to pattern-based translation
+        return self._pattern_based_translation(natural_language_query)
+    
+    def _has_specific_entities(self, query: str) -> bool:
+        """Check if query contains specific entities that need AI processing."""
+        # Check for VM/computer names (anything that looks like a resource name)
+        has_potential_name = bool(re.search(r'\b[A-Za-z]+[A-Za-z0-9\-_]+\b', query))
+        # Check for IPs
+        has_ip = bool(re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', query))
+        # Check for emails
+        has_email = bool(re.search(r'[\w\.-]+@[\w\.-]+\.\w+', query))
+        # Check for filter keywords
+        has_filter = any(word in query for word in [
+            'filter', 'where', 'only', 'specific', 'named', 'called',
+            'from', 'by', 'for', 'of', 'with'
+        ])
+        # Check for resource identifiers (VM names, etc.)
+        has_resource = bool(re.search(r'[Vv][Mm]|[Ss]erver|[Cc]omputer|[Mm]achine', query))
         
-        # If OpenAI is not configured, use pattern matching
-        if not self.client:
-            return self._pattern_based_translation(natural_language_query)
-        
-        # Use AI for translation
-        return self._ai_translate(natural_language_query, available_tables)
+        return has_potential_name or has_ip or has_email or has_filter or has_resource
     
     def _pattern_based_translation(self, query: str) -> str:
         """Simple pattern-based translation without AI."""
@@ -454,6 +495,10 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
             time_filter = "| where TimeGenerated > ago(24h)"
         elif "yesterday" in query_lower:
             time_filter = "| where TimeGenerated between(ago(48h)..ago(24h))"
+        
+        # Extract potential resource/VM name (capitalized word or word with numbers)
+        resource_name_match = re.search(r'\b([A-Z][A-Za-z0-9\-_]+)\b', query)
+        resource_name = resource_name_match.group(1) if resource_name_match else None
         
         # Extract IP address if mentioned
         ip_filter = ""
@@ -484,14 +529,18 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
                 method_filter = f"| where CsMethod == '{method}' or RequestMethod == '{method}'"
                 break
         
-        # Detect table based on keywords - check explicit table names first
+        # Detect table based on keywords - PRIORITY ORDER MATTERS
         table = "AzureDiagnostics"
+        computer_filter = ""
+        
+        # First check explicit table names
         explicit_tables = [
             "AppServiceHTTPLogs", "AppServiceConsoleLogs", "AppServiceAppLogs",
             "AppServiceAuditLogs", "FunctionAppLogs", "AzureActivity", "SigninLogs",
             "AppRequests", "AppExceptions", "AppTraces", "AppDependencies",
             "SecurityEvent", "SecurityAlert", "ContainerLog", "KubeEvents",
-            "Perf", "Heartbeat", "Syslog", "Event", "AzureDiagnostics", "AzureMetrics"
+            "Perf", "Heartbeat", "Syslog", "Event", "AzureDiagnostics", "AzureMetrics",
+            "AppAvailabilityResults", "VMComputer", "VMConnection", "InsightsMetrics"
         ]
         
         for tbl in explicit_tables:
@@ -499,9 +548,22 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
                 table = tbl
                 break
         else:
-            # Detect table based on keywords
+            # PRIORITY: VM/Computer availability - use Heartbeat (NOT AppAvailabilityResults!)
+            if any(word in query_lower for word in ["vm ", "virtual machine", "virtualmachine", "computer", "server", "machine"]):
+                if any(word in query_lower for word in ["availability", "health", "status", "uptime", "heartbeat", "alive", "running"]):
+                    table = "Heartbeat"
+                    if resource_name:
+                        computer_filter = f"| where Computer contains '{resource_name}'"
+                elif "perf" in query_lower or "performance" in query_lower or "cpu" in query_lower or "memory" in query_lower:
+                    table = "Perf"
+                    if resource_name:
+                        computer_filter = f"| where Computer contains '{resource_name}'"
+                else:
+                    table = "Heartbeat"
+                    if resource_name:
+                        computer_filter = f"| where Computer contains '{resource_name}'"
             # App Service
-            if any(word in query_lower for word in ["app service", "appservice", "web app", "webapp", "website", "http log"]):
+            elif any(word in query_lower for word in ["app service", "appservice", "web app", "webapp", "website", "http log"]):
                 table = "AppServiceHTTPLogs"
             # Functions
             elif any(word in query_lower for word in ["function", "azure function", "serverless"]):
@@ -512,10 +574,13 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
             # Sign-ins
             elif any(word in query_lower for word in ["sign in", "signin", "login", "logon", "authentication", "logged in"]):
                 table = "SigninLogs"
+            # Web availability tests (NOT VM!)
+            elif "availability" in query_lower and any(word in query_lower for word in ["test", "web", "url", "ping", "site"]):
+                table = "AppAvailabilityResults"
             # Application Insights
             elif any(word in query_lower for word in ["request", "api call"]):
                 table = "AppRequests"
-            elif any(word in query_lower for word in ["exception", "crash", "error"]):
+            elif any(word in query_lower for word in ["exception", "crash"]):
                 table = "AppExceptions"
             elif any(word in query_lower for word in ["trace"]):
                 table = "AppTraces"
@@ -527,11 +592,11 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
             # Containers
             elif any(word in query_lower for word in ["container", "docker", "kubernetes", "k8s", "aks", "pod"]):
                 table = "ContainerLog"
-            # Performance
+            # Performance (general)
             elif any(word in query_lower for word in ["performance", "cpu", "memory", "disk", "perf"]):
                 table = "Perf"
-            # VMs
-            elif any(word in query_lower for word in ["heartbeat", "vm", "virtual machine", "computer"]):
+            # Heartbeat (general)
+            elif any(word in query_lower for word in ["heartbeat"]):
                 table = "Heartbeat"
             # Syslog
             elif any(word in query_lower for word in ["syslog", "linux"]):
@@ -541,7 +606,12 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
                 table = "Event"
         
         # Build query with all filters
-        filters = time_filter + ip_filter + status_filter + method_filter
+        filters = computer_filter + time_filter + ip_filter + status_filter + method_filter
+        
+        # For Heartbeat with VM name, return a more useful query
+        if table == "Heartbeat" and computer_filter:
+            return f"Heartbeat {filters} | summarize LastHeartbeat=max(TimeGenerated), HeartbeatCount=count() by Computer, OSType, ComputerEnvironment | order by LastHeartbeat desc | take 100"
+        
         return f"{table} {filters} | order by TimeGenerated desc | take 100"
     
     def _ai_translate(self, query: str, available_tables: Optional[list] = None) -> str:
@@ -554,6 +624,19 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
         user_prompt = f"Convert this natural language query to KQL: {query}"
         
         hints = []
+        
+        # CRITICAL: Detect VM/computer availability queries
+        query_lower = query.lower()
+        if any(word in query_lower for word in ['vm', 'virtual machine', 'virtualmachine', 'computer', 'server', 'machine']):
+            if any(word in query_lower for word in ['availability', 'health', 'status', 'uptime', 'alive', 'running', 'online', 'offline']):
+                hints.append("IMPORTANT: User is asking about VM/computer availability - use Heartbeat table with Computer column, NOT AppAvailabilityResults!")
+                # Try to extract the VM/computer name
+                name_match = re.search(r'\b([A-Z][A-Za-z0-9\-_]+)\b', query)
+                if name_match:
+                    potential_name = name_match.group(1)
+                    # Skip common words
+                    if potential_name.lower() not in ['vm', 'server', 'machine', 'computer', 'find', 'get', 'show', 'check']:
+                        hints.append(f"VM/Computer name to filter: {potential_name}")
         
         # Extract IP addresses
         ip_matches = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', query)
