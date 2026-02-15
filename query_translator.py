@@ -11,42 +11,74 @@ class QueryTranslator:
     
     SYSTEM_PROMPT = """You are an expert at translating natural language queries into KQL (Kusto Query Language) for Azure Log Analytics.
 
-Common Azure Log Analytics tables include:
-- AzureActivity: Azure subscription activity logs
-- AzureDiagnostics: Diagnostic logs from Azure resources
+Your task: Convert ANY user question about Azure logs into a valid KQL query. Be flexible and understand various phrasings.
+
+Common Azure Log Analytics tables and their use cases:
+- AppServiceHTTPLogs: Azure App Service HTTP request/response logs (web apps, APIs)
+- AppServiceConsoleLogs: App Service console output and application logs
+- AppServiceAppLogs: Application-level logs from App Service
+- AppServicePlatformLogs: Platform-level App Service logs
+- AppServiceFileAuditLogs: File system audit logs for App Service
+- FunctionAppLogs: Azure Functions execution logs
+- AzureActivity: Azure subscription activity/audit logs (who did what)
+- AzureDiagnostics: Diagnostic logs from Azure resources (generic)
 - AzureMetrics: Metrics from Azure resources
-- Heartbeat: Agent heartbeat data
-- Perf: Performance counters
+- Heartbeat: Agent heartbeat/health data
+- Perf: Performance counters (CPU, memory, disk)
 - Event: Windows Event logs
-- Syslog: Linux syslog
-- SecurityEvent: Security events
+- Syslog: Linux syslog messages
+- SecurityEvent: Security events and alerts
+- SigninLogs: Azure AD sign-in logs
+- AuditLogs: Azure AD audit logs
 - AppTraces: Application Insights traces
-- AppRequests: Application Insights requests
+- AppRequests: Application Insights HTTP requests
 - AppExceptions: Application Insights exceptions
-- ContainerLog: Container logs from AKS
+- AppDependencies: Application Insights dependency calls
+- ContainerLog: Container/Kubernetes logs from AKS
 - KubeEvents: Kubernetes events
+- VMConnection: VM connection data
+- Update: Update management logs
+- SQLSecurityAuditEvents: SQL audit logs
+
+Query interpretation guidelines:
+- "app service logs" or "web app logs" → Use AppServiceHTTPLogs or AppServiceConsoleLogs
+- "function logs" → Use FunctionAppLogs
+- "errors" or "failures" → Filter by Level == 'Error' or Success == false
+- "slow requests" or "performance" → Look for requests with high duration
+- "who created/deleted/modified" → Use AzureActivity
+- "sign ins" or "logins" → Use SigninLogs
+- "last hour/day/week" → Use appropriate ago() function
 
 KQL Best Practices:
 1. Always use 'where' to filter early
-2. Use 'project' to select only needed columns
+2. Use 'project' to select only needed columns  
 3. Use 'summarize' for aggregations
-4. Use 'order by' for sorting
-5. Use 'take' or 'limit' to restrict results
-6. Time filters: TimeGenerated > ago(1h), between(datetime(2024-01-01)..datetime(2024-01-02))
+4. Use 'order by' for sorting (usually by TimeGenerated desc)
+5. Use 'take' or 'limit' to restrict results (default to 100)
+6. Time filters: TimeGenerated > ago(1h), ago(24h), ago(7d)
 
-Respond ONLY with valid KQL query, no explanations. If the query is ambiguous, make reasonable assumptions.
-If you cannot translate the query, respond with: ERROR: <reason>
+IMPORTANT: 
+- Respond ONLY with valid KQL query - no explanations, no markdown, no code blocks
+- If the user's request is vague, make reasonable assumptions and pick the most likely table
+- Always include a time filter (default: last 24 hours) and a result limit (default: 100)
+- Never return an error unless absolutely impossible to interpret
 """
 
     COMMON_QUERIES = {
-        "errors": "AzureDiagnostics | where Level == 'Error' | take 100",
-        "failed requests": "AppRequests | where Success == false | take 100",
-        "exceptions": "AppExceptions | take 100",
-        "activity": "AzureActivity | take 100",
-        "heartbeat": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer | order by LastHeartbeat desc",
-        "performance": "Perf | where ObjectName == 'Processor' and CounterName == '% Processor Time' | summarize avg(CounterValue) by Computer, bin(TimeGenerated, 5m)",
-        "security events": "SecurityEvent | take 100",
-        "container logs": "ContainerLog | take 100",
+        "errors": "AzureDiagnostics | where Level == 'Error' | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "failed requests": "AppRequests | where Success == false | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "exceptions": "AppExceptions | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "activity": "AzureActivity | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "heartbeat": "Heartbeat | summarize LastHeartbeat=max(TimeGenerated) by Computer | order by LastHeartbeat desc | take 100",
+        "performance": "Perf | where ObjectName == 'Processor' and CounterName == '% Processor Time' | where TimeGenerated > ago(1h) | summarize avg(CounterValue) by Computer, bin(TimeGenerated, 5m)",
+        "security events": "SecurityEvent | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "container logs": "ContainerLog | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "app service": "AppServiceHTTPLogs | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "app service logs": "AppServiceHTTPLogs | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "web app": "AppServiceHTTPLogs | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "function logs": "FunctionAppLogs | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "sign in": "SigninLogs | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "login": "SigninLogs | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
     }
 
     def __init__(self):

@@ -811,6 +811,22 @@ body {
 .tables-panel {
     display: flex;
     flex-direction: column;
+    transition: all 0.3s ease;
+}
+
+.tables-panel.minimized {
+    min-width: 60px;
+    max-width: 60px;
+    width: 60px;
+}
+
+.tables-panel.minimized .panel-title span {
+    display: none;
+}
+
+.tables-panel .panel-controls {
+    display: flex;
+    gap: var(--spacing-xs);
 }
 
 .search-box {

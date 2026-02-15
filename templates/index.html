@@ -162,15 +162,20 @@
             </section>
 
             <!-- Right Panel - Tables & Schema -->
-            <section class="panel tables-panel">
+            <section class="panel tables-panel" id="tablesPanel">
                 <div class="panel-header">
                     <div class="panel-title">
                         <i class="fas fa-layer-group"></i>
                         <span>DATA SOURCES</span>
                     </div>
-                    <button class="control-btn" id="refreshTablesBtn" title="Refresh">
-                        <i class="fas fa-sync-alt"></i>
-                    </button>
+                    <div class="panel-controls">
+                        <button class="control-btn" id="toggleTablesBtn" title="Minimize/Maximize">
+                            <i class="fas fa-minus" id="toggleTablesIcon"></i>
+                        </button>
+                        <button class="control-btn" id="refreshTablesBtn" title="Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="search-box">

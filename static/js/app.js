@@ -121,6 +121,39 @@ function setupEventListeners() {
     elements.refreshTablesBtn.addEventListener('click', loadTables);
     elements.tableSearch.addEventListener('input', filterTables);
     elements.closeSchemaBtn.addEventListener('click', closeSchema);
+    
+    // Toggle tables panel minimize/maximize
+    const toggleTablesBtn = document.getElementById('toggleTablesBtn');
+    if (toggleTablesBtn) {
+        toggleTablesBtn.addEventListener('click', toggleTablesPanel);
+    }
+}
+
+// Toggle tables panel minimize/maximize
+function toggleTablesPanel() {
+    const tablesPanel = document.getElementById('tablesPanel');
+    const toggleIcon = document.getElementById('toggleTablesIcon');
+    const tablesList = document.getElementById('tablesList');
+    const tableSearch = document.querySelector('.tables-panel .search-box');
+    const schemaSection = document.getElementById('schemaSection');
+    
+    if (tablesPanel.classList.contains('minimized')) {
+        // Maximize
+        tablesPanel.classList.remove('minimized');
+        toggleIcon.classList.remove('fa-plus');
+        toggleIcon.classList.add('fa-minus');
+        if (tablesList) tablesList.style.display = '';
+        if (tableSearch) tableSearch.style.display = '';
+        if (schemaSection) schemaSection.style.display = '';
+    } else {
+        // Minimize
+        tablesPanel.classList.add('minimized');
+        toggleIcon.classList.remove('fa-minus');
+        toggleIcon.classList.add('fa-plus');
+        if (tablesList) tablesList.style.display = 'none';
+        if (tableSearch) tableSearch.style.display = 'none';
+        if (schemaSection) schemaSection.style.display = 'none';
+    }
 }
 
 // ================================================
