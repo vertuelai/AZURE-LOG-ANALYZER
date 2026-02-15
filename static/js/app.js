@@ -43,6 +43,11 @@ const elements = {
     exportCsvBtn: document.getElementById('exportCsvBtn'),
     exportJsonBtn: document.getElementById('exportJsonBtn'),
     
+    // Scroll Navigation
+    scrollStartBtn: document.getElementById('scrollStartBtn'),
+    scrollEndBtn: document.getElementById('scrollEndBtn'),
+    fullscreenBtn: document.getElementById('fullscreenBtn'),
+    
     // Charts
     chartContainer: document.getElementById('chartContainer'),
     resultsChart: document.getElementById('resultsChart'),
@@ -59,10 +64,15 @@ const elements = {
     schemaContent: document.getElementById('schemaContent'),
     closeSchemaBtn: document.getElementById('closeSchemaBtn'),
     
-    // Tables Panel Toggle
+    // Panel Toggles
     tablesPanel: document.getElementById('tablesPanel'),
     toggleTablesBtn: document.getElementById('toggleTablesBtn'),
     toggleTablesIcon: document.getElementById('toggleTablesIcon'),
+    toggleQueryBtn: document.getElementById('toggleQueryBtn'),
+    queryPanel: document.getElementById('queryPanel'),
+    queryContent: document.getElementById('queryContent'),
+    tablesContent: document.getElementById('tablesContent'),
+    resultsPanel: document.getElementById('resultsPanel'),
     
     // Status
     connectionStatus: document.getElementById('connectionStatus'),
@@ -141,6 +151,22 @@ function setupEventListeners() {
         elements.toggleTablesBtn.addEventListener('click', toggleTablesPanel);
     }
     
+    // Toggle query panel
+    if (elements.toggleQueryBtn) {
+        elements.toggleQueryBtn.addEventListener('click', toggleQueryPanel);
+    }
+    
+    // Scroll navigation
+    if (elements.scrollStartBtn) {
+        elements.scrollStartBtn.addEventListener('click', scrollToStart);
+    }
+    if (elements.scrollEndBtn) {
+        elements.scrollEndBtn.addEventListener('click', scrollToEnd);
+    }
+    if (elements.fullscreenBtn) {
+        elements.fullscreenBtn.addEventListener('click', toggleFullscreen);
+    }
+    
     // Chart controls
     if (elements.showChartBtn) {
         elements.showChartBtn.addEventListener('click', showChart);
@@ -163,6 +189,7 @@ function setupEventListeners() {
 
 function toggleTablesPanel() {
     const panel = elements.tablesPanel;
+    const content = elements.tablesContent;
     const icon = elements.toggleTablesIcon;
     
     if (!panel) return;
@@ -174,14 +201,60 @@ function toggleTablesPanel() {
         icon.classList.add(isMinimized ? 'fa-plus' : 'fa-minus');
     }
     
-    // Toggle visibility of child elements
-    const searchBox = panel.querySelector('.search-box');
-    const tablesList = panel.querySelector('.tables-list');
-    const schemaSection = panel.querySelector('.schema-section');
+    if (content) {
+        content.style.display = isMinimized ? 'none' : '';
+    }
+}
+
+// ================================================
+// Query Panel Toggle
+// ================================================
+
+function toggleQueryPanel() {
+    const panel = elements.queryPanel;
+    const content = elements.queryContent;
     
-    if (searchBox) searchBox.style.display = isMinimized ? 'none' : '';
-    if (tablesList) tablesList.style.display = isMinimized ? 'none' : '';
-    if (schemaSection && !isMinimized) schemaSection.style.display = 'none';
+    if (!panel || !content) return;
+    
+    const isMinimized = panel.classList.toggle('minimized');
+    content.style.display = isMinimized ? 'none' : '';
+}
+
+// ================================================
+// Scroll Navigation Functions
+// ================================================
+
+function scrollToStart() {
+    const wrapper = elements.resultsWrapper;
+    if (wrapper) {
+        wrapper.scrollTo({ left: 0, behavior: 'smooth' });
+    }
+}
+
+function scrollToEnd() {
+    const wrapper = elements.resultsWrapper;
+    if (wrapper) {
+        wrapper.scrollTo({ left: wrapper.scrollWidth, behavior: 'smooth' });
+    }
+}
+
+function toggleFullscreen() {
+    const panel = elements.resultsPanel;
+    if (!panel) return;
+    
+    const isFullscreen = panel.classList.toggle('fullscreen');
+    
+    if (elements.fullscreenBtn) {
+        elements.fullscreenBtn.innerHTML = isFullscreen 
+            ? '<i class="fas fa-compress"></i> Exit Fullscreen'
+            : '<i class="fas fa-expand"></i> Fullscreen';
+    }
+    
+    // Hide/show bottom panels
+    const bottomPanels = document.querySelector('.bottom-panels');
+    if (bottomPanels) {
+        bottomPanels.style.display = isFullscreen ? 'none' : '';
+    }
 }
 
 // ================================================
