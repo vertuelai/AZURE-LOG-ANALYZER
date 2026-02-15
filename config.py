@@ -35,12 +35,9 @@ class Config:
     # Azure Key Vault Configuration
     KEY_VAULT_URL = os.getenv("AZURE_KEY_VAULT_URL")  # e.g., https://your-vault.vault.azure.net/
     
-    # OpenAI Configuration (for natural language queries)
+    # Azure OpenAI Configuration (for natural language queries)
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
     AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-    
-    # Keys loaded from env vars (Key Vault support removed for simplicity)
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY")
     
     @classmethod
@@ -52,5 +49,5 @@ class Config:
     
     @classmethod
     def has_openai(cls):
-        """Check if OpenAI is configured."""
-        return bool(cls.OPENAI_API_KEY or (cls.AZURE_OPENAI_ENDPOINT and cls.AZURE_OPENAI_KEY))
+        """Check if Azure OpenAI is configured."""
+        return bool(cls.AZURE_OPENAI_ENDPOINT and cls.AZURE_OPENAI_KEY)

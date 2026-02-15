@@ -51,7 +51,7 @@ def config_status():
         return jsonify({
             'configured': True,
             'workspace_id': Config.WORKSPACE_ID[:8] + '...' if Config.WORKSPACE_ID else None,
-            'ai_enabled': bool(Config.OPENAI_ENDPOINT or Config.OPENAI_API_KEY)
+            'ai_enabled': bool(Config.AZURE_OPENAI_ENDPOINT and Config.AZURE_OPENAI_KEY)
         })
     except Exception as e:
         return jsonify({

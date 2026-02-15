@@ -53,7 +53,7 @@ If you cannot translate the query, respond with: ERROR: <reason>
         self.client = self._create_openai_client()
     
     def _create_openai_client(self):
-        """Create OpenAI client if configured."""
+        """Create Azure OpenAI client if configured."""
         if Config.AZURE_OPENAI_ENDPOINT and Config.AZURE_OPENAI_KEY:
             from openai import AzureOpenAI
             return AzureOpenAI(
@@ -61,9 +61,6 @@ If you cannot translate the query, respond with: ERROR: <reason>
                 api_key=Config.AZURE_OPENAI_KEY,
                 api_version="2024-02-15-preview"
             )
-        elif Config.OPENAI_API_KEY:
-            from openai import OpenAI
-            return OpenAI(api_key=Config.OPENAI_API_KEY)
         return None
     
     def translate(self, natural_language_query: str, available_tables: Optional[list] = None) -> str:
