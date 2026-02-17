@@ -14,6 +14,33 @@ class QueryTranslator:
     # Path to custom instructions file
     INSTRUCTIONS_FILE = os.path.join(os.path.dirname(__file__), "instructions.json")
     
+    # Compact system prompt for AI translation - focused on critical rules only
+    SYSTEM_PROMPT_COMPACT = """You are an expert KQL translator for Azure Log Analytics. Convert natural language to valid KQL.
+
+CRITICAL RULES:
+1. Use explicit table names when specified by user
+2. VM/computer availability → use Heartbeat table (Computer column), NOT AppAvailabilityResults
+3. Web test results → use AppAvailabilityResults
+4. Always include TimeGenerated filter (default: ago(24h))
+5. Add take 100 for non-aggregation queries
+6. Return ONLY the KQL query - no explanations or code blocks
+
+KEY TABLES:
+- Heartbeat: VM/computer health (Computer, OSType)
+- Perf: Performance metrics (Computer, ObjectName, CounterName, CounterValue)
+- SigninLogs: Azure AD logins (UserPrincipalName, IPAddress, ResultType 0=success)
+- AzureActivity: Resource operations (Caller, OperationNameValue)
+- AppServiceHTTPLogs: Web app HTTP logs (CIp, CsMethod, ScStatus, TimeTaken, CsHost)
+- AppRequests: App Insights requests (Url, ResultCode, DurationMs)
+- AppExceptions: App errors (ExceptionType, Message)
+- SecurityEvent: Security logs (Computer, Account, EventID)
+
+COLUMN MAPPINGS:
+- IP: CIp (AppService), IPAddress (Signin), CallerIpAddress (Activity)
+- User: UserPrincipalName (Signin), Caller (Activity), Account (Security)
+- Status: ScStatus (AppService), ResultCode (AppRequests), ResultType (Signin)
+"""
+
     SYSTEM_PROMPT = """You are an expert KQL (Kusto Query Language) translator for Azure Log Analytics. Your ONLY job is to convert natural language into valid KQL queries.
 
 ## CRITICAL INSTRUCTIONS:
@@ -409,6 +436,8 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
     def __init__(self):
         self.client = self._create_openai_client()
         self.custom_instructions = self._load_instructions()
+        # Cache the instructions context to avoid rebuilding on every query
+        self._cached_instructions_context = None
     
     def _load_instructions(self) -> dict:
         """Load custom instructions from instructions.json file."""
@@ -425,11 +454,21 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
     def reload_instructions(self):
         """Reload instructions from file (useful for hot-reloading)."""
         self.custom_instructions = self._load_instructions()
+        # Clear cached context when instructions are reloaded
+        self._cached_instructions_context = None
         return self.custom_instructions
     
     def _get_instructions_context(self) -> str:
-        """Build context string from custom instructions for AI prompt."""
+        """Build context string from custom instructions for AI prompt.
+        
+        Results are cached to avoid rebuilding on every query.
+        """
+        # Return cached context if available
+        if self._cached_instructions_context is not None:
+            return self._cached_instructions_context
+        
         if not self.custom_instructions:
+            self._cached_instructions_context = ""
             return ""
         
         context_parts = []
@@ -575,7 +614,9 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
                 fmt_text += "- Include explanation when helpful\n"
             context_parts.append(fmt_text)
         
-        return "\n\n".join(context_parts)
+        # Cache the result
+        self._cached_instructions_context = "\n\n".join(context_parts)
+        return self._cached_instructions_context
     
     def _create_openai_client(self):
         """Create Azure OpenAI client if configured."""
@@ -788,14 +829,21 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
     
     def _ai_translate(self, query: str, available_tables: Optional[list] = None) -> str:
         """Use AI to translate the query."""
-        context = ""
-        if available_tables:
-            context = f"\n\nAvailable tables in this workspace: {', '.join(available_tables)}"
+        # Build compact context - only include essential information
+        context_parts = []
         
-        # Add custom instructions context
-        custom_context = self._get_instructions_context()
-        if custom_context:
-            context += f"\n\n## CUSTOM INSTRUCTIONS FROM CONFIGURATION:\n{custom_context}"
+        if available_tables:
+            # Only include first 30 tables to avoid bloating the prompt
+            tables_to_show = available_tables[:30]
+            context_parts.append(f"Available tables: {', '.join(tables_to_show)}")
+        
+        # Add only essential custom instructions (resource aliases)
+        aliases = self.custom_instructions.get("resource_aliases", {}).get("aliases", {})
+        if aliases:
+            alias_str = ", ".join(f"'{k}'='{v}'" for k, v in aliases.items())
+            context_parts.append(f"Resource aliases: {alias_str}")
+        
+        context = "\n".join(context_parts) if context_parts else ""
         
         # Build a more specific prompt with extracted patterns
         user_prompt = f"Convert this natural language query to KQL: {query}"
@@ -884,11 +932,16 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
         if hints:
             user_prompt += "\n\nDetected patterns:\n- " + "\n- ".join(hints)
         
+        # Build system message with compact prompt and context
+        system_message = self.SYSTEM_PROMPT_COMPACT
+        if context:
+            system_message += f"\n\n{context}"
+        
         try:
             response = self.client.chat.completions.create(
                 model=Config.AZURE_OPENAI_DEPLOYMENT or "gpt-4",
                 messages=[
-                    {"role": "system", "content": self.SYSTEM_PROMPT + context},
+                    {"role": "system", "content": system_message},
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0,
