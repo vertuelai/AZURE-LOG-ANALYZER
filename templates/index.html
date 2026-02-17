@@ -114,6 +114,31 @@
                         <canvas id="resultsChart"></canvas>
                     </div>
 
+                    <!-- AI Insights Panel -->
+                    <div class="ai-insights-container" id="aiInsightsContainer" style="display: none;">
+                        <div class="ai-insights-header">
+                            <div class="ai-insights-title">
+                                <i class="fas fa-robot"></i>
+                                <span>AI ANALYSIS</span>
+                            </div>
+                            <div class="ai-insights-controls">
+                                <button class="control-btn" id="refreshInsightsBtn" title="Refresh Analysis">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                                <button class="control-btn" id="closeInsightsBtn" title="Close">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="ai-insights-content" id="aiInsightsContent">
+                            <div class="ai-loading" id="aiInsightsLoading">
+                                <i class="fas fa-brain fa-pulse"></i>
+                                <span>Analyzing data...</span>
+                            </div>
+                            <div class="ai-insights-text" id="aiInsightsText"></div>
+                        </div>
+                    </div>
+
                     <div class="results-table-wrapper" id="resultsWrapper" style="display: none;">
                         <table class="results-table" id="resultsTable">
                             <thead id="tableHead"></thead>

@@ -12,6 +12,8 @@ let state = {
     tables: [],
     lastResults: null,
     lastColumns: null,
+    lastQuestion: null,
+    lastKql: null,
     queryCount: 0,
     isConnected: false,
     currentChart: null
@@ -51,6 +53,14 @@ const elements = {
     schemaTableName: document.getElementById('schemaTableName'),
     schemaContent: document.getElementById('schemaContent'),
     closeSchemaBtn: document.getElementById('closeSchemaBtn'),
+    
+    // AI Insights
+    aiInsightsContainer: document.getElementById('aiInsightsContainer'),
+    aiInsightsContent: document.getElementById('aiInsightsContent'),
+    aiInsightsLoading: document.getElementById('aiInsightsLoading'),
+    aiInsightsText: document.getElementById('aiInsightsText'),
+    refreshInsightsBtn: document.getElementById('refreshInsightsBtn'),
+    closeInsightsBtn: document.getElementById('closeInsightsBtn'),
     
     // Status
     connectionStatus: document.getElementById('connectionStatus'),
@@ -124,6 +134,14 @@ function setupEventListeners() {
     elements.tableSearch.addEventListener('input', filterTables);
     elements.closeSchemaBtn.addEventListener('click', closeSchema);
     
+    // AI Insights controls
+    if (elements.refreshInsightsBtn) {
+        elements.refreshInsightsBtn.addEventListener('click', fetchAiInsights);
+    }
+    if (elements.closeInsightsBtn) {
+        elements.closeInsightsBtn.addEventListener('click', closeAiInsights);
+    }
+    
     // Toggle tables panel minimize/maximize
     const toggleTablesBtn = document.getElementById('toggleTablesBtn');
     if (toggleTablesBtn) {
@@ -187,16 +205,27 @@ async function executeNaturalQuery() {
             return;
         }
         
+        // Store for AI analysis
+        state.lastQuestion = question;
+        state.lastKql = data.kql;
+        state.lastResults = data.results;
+        state.lastColumns = data.columns;
+        
         // Show generated KQL
         displayKql(data.kql);
         
-        // Display results
+        // Display results IMMEDIATELY
         displayResults(data.results, data.columns);
         
         // Update stats
         updateStats(queryTime, data.row_count);
         
         showToast(`Query completed: ${data.row_count} records found`, 'success');
+        
+        // Fetch AI insights asynchronously (non-blocking)
+        if (data.results && data.results.length > 0) {
+            fetchAiInsights();
+        }
     } catch (error) {
         showError(error.message);
     }
@@ -227,7 +256,13 @@ async function executeKqlQuery() {
             return;
         }
         
-        // Display results
+        // Store for AI analysis
+        state.lastQuestion = '';
+        state.lastKql = kql;
+        state.lastResults = data.results;
+        state.lastColumns = data.columns;
+        
+        // Display results IMMEDIATELY
         displayResults(data.results, data.columns);
         
         // Update stats
@@ -237,6 +272,11 @@ async function executeKqlQuery() {
         elements.kqlDisplay.classList.remove('visible');
         
         showToast(`Query completed: ${data.row_count} records found`, 'success');
+        
+        // Fetch AI insights asynchronously (non-blocking)
+        if (data.results && data.results.length > 0) {
+            fetchAiInsights();
+        }
     } catch (error) {
         showError(error.message);
     }
@@ -375,6 +415,132 @@ function displayResults(results, columns) {
     elements.emptyState.style.display = 'none';
     elements.loadingState.style.display = 'none';
     elements.resultsWrapper.style.display = 'block';
+}
+
+// ================================================
+// AI Insights Functions
+// ================================================
+
+async function fetchAiInsights() {
+    if (!state.lastResults || state.lastResults.length === 0) {
+        showToast('No results to analyze', 'info');
+        return;
+    }
+    
+    // Show insights container with loading state
+    showAiInsightsLoading();
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/analyze/results`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                results: state.lastResults,
+                columns: state.lastColumns,
+                question: state.lastQuestion || '',
+                kql: state.lastKql || ''
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            showAiInsightsError(data.error);
+            return;
+        }
+        
+        // Display the AI insights
+        displayAiInsights(data.insights);
+    } catch (error) {
+        showAiInsightsError(error.message);
+    }
+}
+
+function showAiInsightsLoading() {
+    if (elements.aiInsightsContainer) {
+        elements.aiInsightsContainer.style.display = 'block';
+    }
+    if (elements.aiInsightsLoading) {
+        elements.aiInsightsLoading.style.display = 'flex';
+    }
+    if (elements.aiInsightsText) {
+        elements.aiInsightsText.style.display = 'none';
+        elements.aiInsightsText.innerHTML = '';
+    }
+}
+
+function displayAiInsights(insights) {
+    if (elements.aiInsightsLoading) {
+        elements.aiInsightsLoading.style.display = 'none';
+    }
+    if (elements.aiInsightsText) {
+        // Convert markdown to HTML (simple conversion)
+        const htmlContent = markdownToHtml(insights);
+        elements.aiInsightsText.innerHTML = htmlContent;
+        elements.aiInsightsText.style.display = 'block';
+    }
+    if (elements.aiInsightsContainer) {
+        elements.aiInsightsContainer.style.display = 'block';
+    }
+}
+
+function showAiInsightsError(error) {
+    if (elements.aiInsightsLoading) {
+        elements.aiInsightsLoading.style.display = 'none';
+    }
+    if (elements.aiInsightsText) {
+        elements.aiInsightsText.innerHTML = `<div class="ai-error"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(error)}</div>`;
+        elements.aiInsightsText.style.display = 'block';
+    }
+}
+
+function closeAiInsights() {
+    if (elements.aiInsightsContainer) {
+        elements.aiInsightsContainer.style.display = 'none';
+    }
+}
+
+function markdownToHtml(markdown) {
+    if (!markdown) return '';
+    
+    let html = escapeHtml(markdown);
+    
+    // Convert markdown to HTML
+    // Bold: **text** or __text__
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    
+    // Italic: *text* or _text_
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+    
+    // Headers: ## Header
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    
+    // Bullet points: - item or * item
+    html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+    
+    // Wrap consecutive <li> in <ul>
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    
+    // Numbered lists: 1. item
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+    
+    // Code: `code`
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Line breaks
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = html.replace(/\n/g, '<br>');
+    
+    // Wrap in paragraph if not already wrapped
+    if (!html.startsWith('<')) {
+        html = '<p>' + html + '</p>';
+    }
+    
+    return html;
 }
 
 function renderTables(tables) {

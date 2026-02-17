@@ -128,6 +128,118 @@ def natural_language_query():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/analyze/results', methods=['POST'])
+def analyze_results():
+    """AI analysis of query results - provides insights and summary."""
+    try:
+        data = request.get_json()
+        results = data.get('results', [])
+        columns = data.get('columns', [])
+        question = data.get('question', '')
+        kql = data.get('kql', '')
+        
+        if not results:
+            return jsonify({'error': 'No results to analyze'}), 400
+        
+        log_analyzer, error = get_analyzer()
+        if error:
+            return jsonify({'error': error}), 500
+        
+        # Check if AI is available
+        if not log_analyzer.translator.client:
+            return jsonify({'error': 'AI not configured'}), 400
+        
+        # Generate AI insights
+        insights = generate_ai_insights(
+            results=results,
+            columns=columns,
+            question=question,
+            kql=kql,
+            client=log_analyzer.translator.client
+        )
+        
+        return jsonify({
+            'success': True,
+            'insights': insights
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def generate_ai_insights(results, columns, question, kql, client):
+    """Generate AI-powered insights from query results."""
+    from config import Config
+    
+    # Prepare a summary of the data for AI analysis
+    row_count = len(results)
+    
+    # Get sample data (first 10 rows) for context
+    sample_data = results[:10] if row_count > 10 else results
+    
+    # Build a compact data summary
+    data_summary = f"""
+Query: {question}
+KQL: {kql}
+Total Records: {row_count}
+Columns: {', '.join(columns)}
+
+Sample Data (first {len(sample_data)} rows):
+"""
+    for i, row in enumerate(sample_data):
+        row_str = " | ".join(f"{k}: {str(v)[:50]}" for k, v in row.items())
+        data_summary += f"\n{i+1}. {row_str[:200]}"
+    
+    # If there are numeric columns, add basic stats
+    numeric_stats = []
+    for col in columns:
+        values = [r.get(col) for r in results if r.get(col) is not None]
+        numeric_values = [v for v in values if isinstance(v, (int, float))]
+        if numeric_values and len(numeric_values) > 1:
+            avg_val = sum(numeric_values) / len(numeric_values)
+            min_val = min(numeric_values)
+            max_val = max(numeric_values)
+            numeric_stats.append(f"{col}: avg={avg_val:.2f}, min={min_val}, max={max_val}")
+    
+    if numeric_stats:
+        data_summary += f"\n\nNumeric Statistics:\n" + "\n".join(numeric_stats)
+    
+    # Count unique values for key columns
+    unique_counts = []
+    for col in columns[:5]:  # First 5 columns
+        unique_values = set(str(r.get(col, ''))[:100] for r in results)
+        if len(unique_values) <= 10:
+            unique_counts.append(f"{col}: {len(unique_values)} unique values - {list(unique_values)[:5]}")
+        else:
+            unique_counts.append(f"{col}: {len(unique_values)} unique values")
+    
+    if unique_counts:
+        data_summary += f"\n\nUnique Value Counts:\n" + "\n".join(unique_counts)
+    
+    system_prompt = """You are an Azure Log Analytics expert. Analyze the query results and provide:
+1. **Summary**: A brief 1-2 sentence summary of what the data shows
+2. **Key Findings**: 3-5 bullet points of important observations
+3. **Anomalies/Concerns**: Any issues, errors, or unusual patterns (if any)
+4. **Recommendations**: 1-2 actionable suggestions based on the data
+
+Keep your response concise and actionable. Use markdown formatting.
+Focus on security implications, performance issues, and operational insights."""
+
+    try:
+        response = client.chat.completions.create(
+            model=Config.AZURE_OPENAI_DEPLOYMENT or "gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze these Azure log query results:\n{data_summary}"}
+            ],
+            temperature=0.3,
+            max_tokens=600
+        )
+        
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Unable to generate insights: {str(e)}"
+
+
 @app.route('/api/query/kql', methods=['POST'])
 def kql_query():
     """Execute a raw KQL query."""
