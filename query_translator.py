@@ -3,12 +3,16 @@
 from typing import Optional
 import json
 import re
+import os
 
 from config import Config
 
 
 class QueryTranslator:
     """Translates natural language queries to KQL."""
+    
+    # Path to custom instructions file
+    INSTRUCTIONS_FILE = os.path.join(os.path.dirname(__file__), "instructions.json")
     
     SYSTEM_PROMPT = """You are an expert KQL (Kusto Query Language) translator for Azure Log Analytics. Your ONLY job is to convert natural language into valid KQL queries.
 
@@ -404,6 +408,174 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
 
     def __init__(self):
         self.client = self._create_openai_client()
+        self.custom_instructions = self._load_instructions()
+    
+    def _load_instructions(self) -> dict:
+        """Load custom instructions from instructions.json file."""
+        try:
+            if os.path.exists(self.INSTRUCTIONS_FILE):
+                with open(self.INSTRUCTIONS_FILE, 'r', encoding='utf-8') as f:
+                    instructions = json.load(f)
+                    print(f"✅ Loaded custom instructions from {self.INSTRUCTIONS_FILE}")
+                    return instructions
+        except Exception as e:
+            print(f"⚠️ Could not load instructions file: {e}")
+        return {}
+    
+    def reload_instructions(self):
+        """Reload instructions from file (useful for hot-reloading)."""
+        self.custom_instructions = self._load_instructions()
+        return self.custom_instructions
+    
+    def _get_instructions_context(self) -> str:
+        """Build context string from custom instructions for AI prompt."""
+        if not self.custom_instructions:
+            return ""
+        
+        context_parts = []
+        
+        # Add agent role and identity
+        agent_role = self.custom_instructions.get("agent_role", {})
+        if agent_role:
+            role_text = "## AGENT ROLE:\n"
+            role_text += f"Identity: {agent_role.get('identity', 'Azure Log Analytics KQL Expert')}\n"
+            responsibilities = agent_role.get("responsibilities", [])
+            if responsibilities:
+                role_text += "Responsibilities:\n" + "\n".join(f"- {r}" for r in responsibilities)
+            context_parts.append(role_text)
+        
+        # Add behavior priority
+        priority = self.custom_instructions.get("behavior_priority", [])
+        if priority:
+            context_parts.append("## BEHAVIOR PRIORITY:\n" + "\n".join(priority))
+        
+        # Add global rules
+        global_rules = self.custom_instructions.get("global_rules", [])
+        if global_rules:
+            context_parts.append("## GLOBAL RULES:\n" + "\n".join(f"- {rule}" for rule in global_rules))
+        
+        # Add time filter rules
+        time_rules = self.custom_instructions.get("time_filter_rules", {})
+        if time_rules:
+            time_text = "## TIME FILTER MAPPINGS:\n"
+            mappings = time_rules.get("mappings", {})
+            for phrase, kql_time in mappings.items():
+                time_text += f"- '{phrase}' → {kql_time}\n"
+            time_text += f"Default time: {time_rules.get('default', 'ago(24h)')}\n"
+            context_parts.append(time_text)
+        
+        # Add table mappings
+        table_mappings = self.custom_instructions.get("table_mappings", {}).get("mappings", [])
+        if table_mappings:
+            mapping_text = "## TABLE MAPPINGS (CRITICAL - Use correct table!):\n"
+            for mapping in table_mappings:
+                terms = ", ".join(mapping.get("terms", []))
+                table = mapping.get("table", "")
+                key_col = mapping.get("key_column", "")
+                notes = mapping.get("notes", "")
+                mapping_text += f"- When user says: [{terms}] → Use table: {table} (key column: {key_col}). {notes}\n"
+            context_parts.append(mapping_text)
+        
+        # Add intelligent interpretation (phrase to KQL mappings)
+        interpretations = self.custom_instructions.get("intelligent_interpretation", {}).get("phrase_mappings", {})
+        if interpretations:
+            interp_text = "## PHRASE INTERPRETATIONS:\n"
+            for phrase, mapping in interpretations.items():
+                if isinstance(mapping, dict):
+                    table = mapping.get("table", "")
+                    filter_cond = mapping.get("filter", "")
+                    pattern = mapping.get("pattern", "")
+                    if table and filter_cond:
+                        interp_text += f"- '{phrase}' → Table: {table}, Filter: {filter_cond}\n"
+                    elif filter_cond:
+                        interp_text += f"- '{phrase}' → Filter: {filter_cond}\n"
+                    elif pattern:
+                        interp_text += f"- '{phrase}' → Pattern: {pattern}\n"
+            context_parts.append(interp_text)
+        
+        # Add KQL patterns
+        kql_patterns = self.custom_instructions.get("kql_patterns", {})
+        if kql_patterns:
+            pattern_text = "## KQL PATTERNS:\n"
+            for pattern_name, pattern_val in kql_patterns.items():
+                if not pattern_name.startswith("_"):
+                    pattern_text += f"- {pattern_name}: {pattern_val}\n"
+            context_parts.append(pattern_text)
+        
+        # Add resource aliases
+        aliases = self.custom_instructions.get("resource_aliases", {}).get("aliases", {})
+        if aliases:
+            alias_text = "## RESOURCE ALIASES:\n"
+            for friendly, actual in aliases.items():
+                alias_text += f"- '{friendly}' means '{actual}'\n"
+            context_parts.append(alias_text)
+        
+        # Add column mappings
+        col_mappings = self.custom_instructions.get("column_mappings", {})
+        if col_mappings:
+            col_text = "## COLUMN NAME MAPPINGS:\n"
+            for concept, tables in col_mappings.items():
+                if concept.startswith("_"):
+                    continue
+                if isinstance(tables, dict):
+                    col_text += f"- {concept}: "
+                    col_text += ", ".join(f"{t}→{c}" for t, c in tables.items())
+                    col_text += "\n"
+            context_parts.append(col_text)
+        
+        # Add performance rules
+        perf_rules = self.custom_instructions.get("performance_rules", {})
+        if perf_rules:
+            perf_text = "## PERFORMANCE RULES:\n"
+            must_do = perf_rules.get("must_do", [])
+            if must_do:
+                perf_text += "MUST DO:\n" + "\n".join(f"- {r}" for r in must_do) + "\n"
+            avoid = perf_rules.get("avoid", [])
+            if avoid:
+                perf_text += "AVOID:\n" + "\n".join(f"- {r}" for r in avoid)
+            context_parts.append(perf_text)
+        
+        # Add security guardrails
+        security = self.custom_instructions.get("security_guardrails", {})
+        if security:
+            sec_text = "## SECURITY GUARDRAILS:\n"
+            must_not = security.get("must_not", [])
+            if must_not:
+                sec_text += "MUST NOT:\n" + "\n".join(f"- {r}" for r in must_not)
+            context_parts.append(sec_text)
+        
+        # Add query templates
+        templates = self.custom_instructions.get("query_templates", {}).get("templates", {})
+        if templates:
+            tmpl_text = "## QUERY TEMPLATES:\n"
+            for name, tmpl in templates.items():
+                desc = tmpl.get("description", "")
+                template = tmpl.get("template", "")
+                tmpl_text += f"- {name}: {desc}\n  Template: {template[:100]}...\n"
+            context_parts.append(tmpl_text)
+        
+        # Add business context
+        business = self.custom_instructions.get("business_context", {})
+        if business:
+            biz_text = "## BUSINESS CONTEXT:\n"
+            critical = business.get("critical_resources", [])
+            if critical:
+                biz_text += f"- Critical resources: {', '.join(critical)}\n"
+            notes = business.get("notes", [])
+            for note in notes:
+                biz_text += f"- {note}\n"
+            context_parts.append(biz_text)
+        
+        # Add response format preferences
+        response_fmt = self.custom_instructions.get("response_format", {})
+        if response_fmt:
+            fmt_text = "## OUTPUT FORMAT:\n"
+            fmt_text += f"- Max results default: {response_fmt.get('max_results_default', 100)}\n"
+            if response_fmt.get("include_explanation"):
+                fmt_text += "- Include explanation when helpful\n"
+            context_parts.append(fmt_text)
+        
+        return "\n\n".join(context_parts)
     
     def _create_openai_client(self):
         """Create Azure OpenAI client if configured."""
@@ -620,6 +792,11 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
         if available_tables:
             context = f"\n\nAvailable tables in this workspace: {', '.join(available_tables)}"
         
+        # Add custom instructions context
+        custom_context = self._get_instructions_context()
+        if custom_context:
+            context += f"\n\n## CUSTOM INSTRUCTIONS FROM CONFIGURATION:\n{custom_context}"
+        
         # Build a more specific prompt with extracted patterns
         user_prompt = f"Convert this natural language query to KQL: {query}"
         
@@ -637,6 +814,12 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
                     # Skip common words
                     if potential_name.lower() not in ['vm', 'server', 'machine', 'computer', 'find', 'get', 'show', 'check']:
                         hints.append(f"VM/Computer name to filter: {potential_name}")
+        
+        # Check for resource aliases from custom instructions
+        aliases = self.custom_instructions.get("resource_aliases", {}).get("aliases", {})
+        for friendly, actual in aliases.items():
+            if friendly.lower() in query_lower:
+                hints.append(f"Resource alias detected: '{friendly}' should be translated to '{actual}'")
         
         # Extract IP addresses
         ip_matches = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', query)

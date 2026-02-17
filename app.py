@@ -238,6 +238,69 @@ def get_sample_queries():
     return jsonify({'samples': samples})
 
 
+@app.route('/api/instructions', methods=['GET'])
+def get_instructions():
+    """Get current custom instructions."""
+    try:
+        log_analyzer, error = get_analyzer()
+        if error:
+            return jsonify({'error': error}), 500
+        
+        instructions = log_analyzer.translator.custom_instructions
+        return jsonify({'instructions': instructions})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/instructions', methods=['POST'])
+def update_instructions():
+    """Update custom instructions."""
+    try:
+        log_analyzer, error = get_analyzer()
+        if error:
+            return jsonify({'error': error}), 500
+        
+        new_instructions = request.json
+        
+        # Validate structure
+        if not isinstance(new_instructions, dict):
+            return jsonify({'error': 'Instructions must be a JSON object'}), 400
+        
+        # Save to file
+        instructions_path = log_analyzer.translator.INSTRUCTIONS_FILE
+        with open(instructions_path, 'w', encoding='utf-8') as f:
+            json.dump(new_instructions, f, indent=2)
+        
+        # Reload in translator
+        log_analyzer.translator.reload_instructions()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Instructions updated successfully',
+            'instructions': log_analyzer.translator.custom_instructions
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/instructions/reload', methods=['POST'])
+def reload_instructions():
+    """Reload instructions from file."""
+    try:
+        log_analyzer, error = get_analyzer()
+        if error:
+            return jsonify({'error': error}), 500
+        
+        instructions = log_analyzer.translator.reload_instructions()
+        return jsonify({
+            'success': True,
+            'message': 'Instructions reloaded',
+            'instructions': instructions
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("🚀 Starting Azure Log Analytics Analyzer Web UI")
     print("📡 Open http://localhost:5000 in your browser")

@@ -6,6 +6,7 @@ A powerful tool to query Azure Log Analytics using **natural language** or **KQL
 
 - **Natural Language Queries**: Ask questions in plain English
 - **AI-Powered Translation**: Converts your questions to KQL (with OpenAI/Azure OpenAI)
+- **🆕 Custom Instructions**: Define business rules and mappings for query translation
 - **Interactive CLI**: User-friendly command-line interface
 - **🆕 Futuristic Web UI**: Beautiful, modern web interface with real-time analytics
 - **KQL Support**: Run raw KQL queries directly
@@ -120,6 +121,69 @@ python main.py --list-tables
 | `export csv <file>` | Export results to CSV |
 | `export json <file>` | Export results to JSON |
 | `exit` | Exit the application |
+
+## 📋 Custom Instructions
+
+The analyzer supports custom instructions via `instructions.json` that guide AI query translation.
+
+### Instructions File Structure
+
+```json
+{
+  "global_rules": [
+    "Always use TimeGenerated for time filtering",
+    "Default time range is last 24 hours"
+  ],
+  
+  "table_mappings": {
+    "mappings": [
+      {
+        "terms": ["VM availability", "server status"],
+        "table": "Heartbeat",
+        "key_column": "Computer",
+        "notes": "Use Heartbeat for VM health"
+      }
+    ]
+  },
+  
+  "resource_aliases": {
+    "aliases": {
+      "prod-web": "webapp-production-001",
+      "main-vm": "VMuaenapp"
+    }
+  },
+  
+  "column_mappings": {
+    "ip_address": {
+      "AppServiceHTTPLogs": "CIp",
+      "SigninLogs": "IPAddress"
+    }
+  },
+  
+  "business_context": {
+    "critical_resources": ["VMuaenapp"],
+    "notes": ["Production VMs start with 'prod-'"]
+  }
+}
+```
+
+### Managing Instructions
+
+**Via API:**
+```bash
+# Get current instructions
+curl http://localhost:5000/api/instructions
+
+# Update instructions
+curl -X POST http://localhost:5000/api/instructions \
+  -H "Content-Type: application/json" \
+  -d @instructions.json
+
+# Reload from file
+curl -X POST http://localhost:5000/api/instructions/reload
+```
+
+**Edit `instructions.json` directly** and restart the app, or call the reload endpoint.
 
 ## 🎯 Example Queries
 
