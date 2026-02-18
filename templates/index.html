@@ -168,6 +168,30 @@
                     </div>
                     
                     <div class="query-content" id="queryContent">
+                        <!-- Time Range Picker -->
+                        <div class="time-range-picker" id="timeRangePicker">
+                            <span class="label">
+                                <i class="fas fa-clock"></i>
+                                TIME RANGE
+                            </span>
+                            <div class="time-range-buttons">
+                                <button class="time-btn" data-range="1h">1H</button>
+                                <button class="time-btn" data-range="6h">6H</button>
+                                <button class="time-btn active" data-range="24h">24H</button>
+                                <button class="time-btn" data-range="7d">7D</button>
+                                <button class="time-btn" data-range="30d">30D</button>
+                                <button class="time-btn" id="customTimeBtn" title="Custom Range">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </button>
+                            </div>
+                            <div class="custom-time-picker hidden" id="customTimePicker">
+                                <input type="datetime-local" id="customTimeStart">
+                                <span>to</span>
+                                <input type="datetime-local" id="customTimeEnd">
+                                <button class="apply-time-btn" id="applyCustomTime">Apply</button>
+                            </div>
+                        </div>
+
                         <div class="query-input-section">
                             <div class="input-wrapper">
                                 <div class="input-glow"></div>
@@ -194,6 +218,10 @@
                                     <i class="fas fa-code"></i>
                                     <span>RUN KQL</span>
                                 </button>
+                                <button class="action-btn tertiary" id="chatModeBtn" title="AI Chat Mode">
+                                    <i class="fas fa-comments"></i>
+                                    <span>CHAT</span>
+                                </button>
                             </div>
                         </div>
 
@@ -216,6 +244,29 @@
                         <span>QUICK QUERIES</span>
                     </div>
                     <div class="sample-chips" id="sampleChips">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Query History & Favorites -->
+                <div class="history-section" id="historySection">
+                    <div class="history-tabs">
+                        <button class="history-tab active" data-tab="history">
+                            <i class="fas fa-history"></i> History
+                        </button>
+                        <button class="history-tab" data-tab="favorites">
+                            <i class="fas fa-star"></i> Favorites
+                        </button>
+                    </div>
+                    <div class="history-actions">
+                        <button class="clear-history-btn" id="clearHistoryBtn" title="Clear History">
+                            <i class="fas fa-trash-alt"></i> Clear
+                        </button>
+                    </div>
+                    <div class="history-content" id="history-list">
+                        <!-- Populated by JS -->
+                    </div>
+                    <div class="history-content hidden" id="favorites-list">
                         <!-- Populated by JS -->
                     </div>
                 </div>
@@ -348,6 +399,30 @@
                 </div>
             </div>
         </footer>
+    </div>
+
+    <!-- AI Chat Modal -->
+    <div class="chat-modal hidden" id="chatModal">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h3><i class="fas fa-robot"></i> AI LOG ASSISTANT</h3>
+                <button class="close-chat-btn" id="closeChatBtn" title="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="chat-context" id="chat-context-info">
+                <em>No query results loaded. Run a query first for context-aware chat.</em>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <!-- Messages populated by JS -->
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="Ask about your results...">
+                <button class="send-chat-btn" id="sendChatBtn">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Toast Notifications -->

@@ -305,11 +305,66 @@ SigninLogs | summarize FailedLogins=countif(ResultType != "0") by UserPrincipalN
         # Errors and Exceptions
         "errors": "AzureDiagnostics | where Level == 'Error' or Category contains 'Error' | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
         "error": "AzureDiagnostics | where Level == 'Error' or Category contains 'Error' | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
-        "exceptions": "AppExceptions | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
-        "exception": "AppExceptions | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        "exceptions": "AppExceptions | where TimeGenerated > ago(24h) | project TimeGenerated, ExceptionType, OuterMessage, InnermostMessage, OperationName, AppRoleName | order by TimeGenerated desc | take 100",
+        "exception": "AppExceptions | where TimeGenerated > ago(24h) | project TimeGenerated, ExceptionType, OuterMessage, InnermostMessage, OperationName, AppRoleName | order by TimeGenerated desc | take 100",
         "failures": "AppRequests | where Success == false | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
         "failed": "AppRequests | where Success == false | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
         "crashes": "AppExceptions | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",
+        
+        # Application Insights - Requests
+        "requests": "AppRequests | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Url, ResultCode, DurationMs, Success, ClientIP, AppRoleName | order by TimeGenerated desc | take 100",
+        "app requests": "AppRequests | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Url, ResultCode, DurationMs, Success, ClientIP, AppRoleName | order by TimeGenerated desc | take 100",
+        "api requests": "AppRequests | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Url, ResultCode, DurationMs, Success, ClientIP | order by TimeGenerated desc | take 100",
+        "slow requests": "AppRequests | where TimeGenerated > ago(24h) | where DurationMs > 3000 | project TimeGenerated, Name, Url, DurationMs, ResultCode, Success | order by DurationMs desc | take 100",
+        "failed requests": "AppRequests | where TimeGenerated > ago(24h) | where Success == false | project TimeGenerated, Name, Url, ResultCode, DurationMs, ClientIP | order by TimeGenerated desc | take 100",
+        "request performance": "AppRequests | where TimeGenerated > ago(24h) | summarize AvgDuration=avg(DurationMs), P95=percentile(DurationMs, 95), Count=count(), FailureRate=countif(Success==false)*100.0/count() by Name | order by Count desc | take 50",
+        
+        # Application Insights - Dependencies
+        "dependencies": "AppDependencies | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Target, DependencyType, DurationMs, Success, ResultCode | order by TimeGenerated desc | take 100",
+        "app dependencies": "AppDependencies | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Target, DependencyType, DurationMs, Success, ResultCode | order by TimeGenerated desc | take 100",
+        "external calls": "AppDependencies | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Target, DependencyType, DurationMs, Success | order by TimeGenerated desc | take 100",
+        "sql calls": "AppDependencies | where TimeGenerated > ago(24h) | where DependencyType == 'SQL' | project TimeGenerated, Name, Target, DurationMs, Success, Data | order by DurationMs desc | take 100",
+        "slow dependencies": "AppDependencies | where TimeGenerated > ago(24h) | where DurationMs > 1000 | project TimeGenerated, Name, Target, DependencyType, DurationMs, Success | order by DurationMs desc | take 100",
+        "failed dependencies": "AppDependencies | where TimeGenerated > ago(24h) | where Success == false | project TimeGenerated, Name, Target, DependencyType, DurationMs, ResultCode | order by TimeGenerated desc | take 100",
+        "http dependencies": "AppDependencies | where TimeGenerated > ago(24h) | where DependencyType == 'HTTP' | project TimeGenerated, Name, Target, DurationMs, Success, ResultCode | order by TimeGenerated desc | take 100",
+        
+        # Application Insights - Traces
+        "traces": "AppTraces | where TimeGenerated > ago(24h) | project TimeGenerated, Message, SeverityLevel, OperationName, AppRoleName | order by TimeGenerated desc | take 100",
+        "app traces": "AppTraces | where TimeGenerated > ago(24h) | project TimeGenerated, Message, SeverityLevel, OperationName, AppRoleName | order by TimeGenerated desc | take 100",
+        "app logs": "AppTraces | where TimeGenerated > ago(24h) | project TimeGenerated, Message, SeverityLevel, OperationName, AppRoleName | order by TimeGenerated desc | take 100",
+        "application logs": "AppTraces | where TimeGenerated > ago(24h) | project TimeGenerated, Message, SeverityLevel, OperationName | order by TimeGenerated desc | take 100",
+        "error traces": "AppTraces | where TimeGenerated > ago(24h) | where SeverityLevel >= 3 | project TimeGenerated, Message, SeverityLevel, OperationName | order by TimeGenerated desc | take 100",
+        "warning traces": "AppTraces | where TimeGenerated > ago(24h) | where SeverityLevel == 2 | project TimeGenerated, Message, OperationName | order by TimeGenerated desc | take 100",
+        
+        # Application Insights - Page Views & Browser
+        "page views": "AppPageViews | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Url, DurationMs, ClientBrowser, ClientOS, ClientCity | order by TimeGenerated desc | take 100",
+        "pageviews": "AppPageViews | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Url, DurationMs, ClientBrowser, ClientOS | order by TimeGenerated desc | take 100",
+        "browser performance": "AppBrowserTimings | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Url, TotalDurationMs, NetworkDurationMs, ProcessingDurationMs | order by TimeGenerated desc | take 100",
+        "browser timings": "AppBrowserTimings | where TimeGenerated > ago(24h) | summarize AvgTotal=avg(TotalDurationMs), AvgNetwork=avg(NetworkDurationMs), Count=count() by Name | order by Count desc | take 50",
+        
+        # Application Insights - Events & Metrics
+        "custom events": "AppEvents | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Properties, AppRoleName | order by TimeGenerated desc | take 100",
+        "app events": "AppEvents | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Properties, AppRoleName | order by TimeGenerated desc | take 100",
+        "custom metrics": "AppMetrics | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Sum, Count, Min, Max, AppRoleName | order by TimeGenerated desc | take 100",
+        "app metrics": "AppMetrics | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Sum, Count, Min, Max | order by TimeGenerated desc | take 100",
+        
+        # Application Insights - Availability
+        "availability tests": "AppAvailabilityResults | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Location, Success, Message, DurationMs | order by TimeGenerated desc | take 100",
+        "availability results": "AppAvailabilityResults | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Location, Success, Message, DurationMs | order by TimeGenerated desc | take 100",
+        "web tests": "AppAvailabilityResults | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Location, Success, DurationMs | order by TimeGenerated desc | take 100",
+        "ping tests": "AppAvailabilityResults | where TimeGenerated > ago(24h) | project TimeGenerated, Name, Location, Success, DurationMs | order by TimeGenerated desc | take 100",
+        "failed availability": "AppAvailabilityResults | where TimeGenerated > ago(24h) | where Success == false | project TimeGenerated, Name, Location, Message, DurationMs | order by TimeGenerated desc | take 100",
+        
+        # Application Insights - Performance Counters
+        "app performance": "AppPerformanceCounters | where TimeGenerated > ago(1h) | project TimeGenerated, Name, Value, AppRoleName | order by TimeGenerated desc | take 100",
+        "performance counters": "AppPerformanceCounters | where TimeGenerated > ago(1h) | project TimeGenerated, Name, Value, AppRoleName | order by TimeGenerated desc | take 100",
+        
+        # Application Insights - Health & Analysis
+        "app health": "AppRequests | where TimeGenerated > ago(1h) | summarize TotalRequests=count(), FailedRequests=countif(Success==false), AvgDuration=avg(DurationMs), P95Duration=percentile(DurationMs, 95) by bin(TimeGenerated, 5m) | order by TimeGenerated desc",
+        "app overview": "AppRequests | where TimeGenerated > ago(24h) | summarize Requests=count(), Failures=countif(Success==false), AvgDuration=avg(DurationMs) by AppRoleName | order by Requests desc",
+        "error rate": "AppRequests | where TimeGenerated > ago(24h) | summarize Total=count(), Errors=countif(Success==false) by bin(TimeGenerated, 1h) | extend ErrorRate=round(Errors*100.0/Total, 2) | order by TimeGenerated desc",
+        "app insights": "AppRequests | where TimeGenerated > ago(24h) | summarize Requests=count(), Failures=countif(Success==false), AvgDuration=avg(DurationMs), P95=percentile(DurationMs, 95) by AppRoleName | order by Requests desc",
+        "application insights": "AppRequests | where TimeGenerated > ago(24h) | summarize Requests=count(), Failures=countif(Success==false), AvgDuration=avg(DurationMs), P95=percentile(DurationMs, 95) by AppRoleName | order by Requests desc",
         
         # App Service
         "app service": "AppServiceHTTPLogs | where TimeGenerated > ago(24h) | order by TimeGenerated desc | take 100",

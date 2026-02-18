@@ -240,6 +240,133 @@ Focus on security implications, performance issues, and operational insights."""
         return f"Unable to generate insights: {str(e)}"
 
 
+@app.route('/api/chat', methods=['POST'])
+def ai_chat():
+    """AI Chat endpoint for conversational analysis."""
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        context = data.get('context', {})
+        chat_history = data.get('history', [])
+        
+        if not message:
+            return jsonify({'error': 'Message is required'}), 400
+        
+        log_analyzer, error = get_analyzer()
+        if error:
+            return jsonify({'error': error}), 500
+        
+        if not log_analyzer.translator.client:
+            return jsonify({'error': 'AI not configured'}), 400
+        
+        # Generate chat response
+        response = generate_chat_response(
+            message=message,
+            context=context,
+            chat_history=chat_history,
+            client=log_analyzer.translator.client,
+            translator=log_analyzer.translator,
+            available_tables=log_analyzer.available_tables
+        )
+        
+        return jsonify({
+            'success': True,
+            'response': response['message'],
+            'suggested_query': response.get('suggested_query'),
+            'action': response.get('action')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def generate_chat_response(message, context, chat_history, client, translator, available_tables):
+    """Generate AI chat response with context awareness."""
+    from config import Config
+    
+    # Build context summary
+    context_summary = ""
+    if context.get('results'):
+        results = context['results']
+        columns = context.get('columns', [])
+        context_summary = f"""
+Current Data Context:
+- Query: {context.get('question', 'N/A')}
+- KQL: {context.get('kql', 'N/A')}
+- Records: {len(results)}
+- Columns: {', '.join(columns[:10])}
+- Sample: {str(results[:3])[:500]}
+"""
+    
+    # Build chat history for context
+    history_messages = []
+    for msg in chat_history[-6:]:  # Last 6 messages for context
+        history_messages.append({
+            "role": msg.get('role', 'user'),
+            "content": msg.get('content', '')
+        })
+    
+    system_prompt = f"""You are an Azure Log Analytics assistant helping users analyze their logs.
+
+{context_summary}
+
+Available tables: {', '.join(available_tables[:20]) if available_tables else 'Unknown'}
+
+Your capabilities:
+1. Answer questions about the current query results
+2. Explain patterns, errors, or anomalies in the data
+3. Suggest follow-up KQL queries (prefix with "SUGGESTED_QUERY:")
+4. Help troubleshoot issues based on log data
+5. Provide security and performance insights
+
+Guidelines:
+- Be concise and actionable
+- If suggesting a query, include the full KQL after "SUGGESTED_QUERY:"
+- Reference specific data points when possible
+- Use markdown for formatting
+- If the user asks for a new query, generate it and mark with SUGGESTED_QUERY:"""
+
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(history_messages)
+    messages.append({"role": "user", "content": message})
+    
+    try:
+        response = client.chat.completions.create(
+            model=Config.AZURE_OPENAI_DEPLOYMENT or "gpt-4",
+            messages=messages,
+            temperature=0.4,
+            max_tokens=800
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+        
+        # Check if there's a suggested query
+        suggested_query = None
+        action = None
+        if "SUGGESTED_QUERY:" in response_text:
+            parts = response_text.split("SUGGESTED_QUERY:")
+            response_text = parts[0].strip()
+            if len(parts) > 1:
+                # Extract the query (might be in code block or plain text)
+                query_part = parts[1].strip()
+                # Remove markdown code blocks if present
+                query_part = query_part.replace("```kql", "").replace("```", "").strip()
+                # Get just the first query (before any newline explanations)
+                suggested_query = query_part.split('\n\n')[0].strip()
+                action = 'suggest_query'
+        
+        return {
+            'message': response_text,
+            'suggested_query': suggested_query,
+            'action': action
+        }
+    except Exception as e:
+        return {
+            'message': f"Sorry, I encountered an error: {str(e)}",
+            'suggested_query': None,
+            'action': None
+        }
+
+
 @app.route('/api/query/kql', methods=['POST'])
 def kql_query():
     """Execute a raw KQL query."""

@@ -16,7 +16,18 @@ let state = {
     lastKql: null,
     queryCount: 0,
     isConnected: false,
-    currentChart: null
+    currentChart: null,
+    // Current query context for chat
+    currentKql: null,
+    currentResults: null,
+    // New state for features
+    selectedTimeRange: '24h',
+    customTimeStart: null,
+    customTimeEnd: null,
+    queryHistory: [],
+    favorites: [],
+    chatHistory: [],
+    chatMode: false
 };
 
 // ================================================
@@ -62,6 +73,26 @@ const elements = {
     refreshInsightsBtn: document.getElementById('refreshInsightsBtn'),
     closeInsightsBtn: document.getElementById('closeInsightsBtn'),
     
+    // Time Range Picker
+    timeRangePicker: document.getElementById('timeRangePicker'),
+    customTimeBtn: document.getElementById('customTimeBtn'),
+    customTimePicker: document.getElementById('customTimePicker'),
+    customTimeStart: document.getElementById('customTimeStart'),
+    customTimeEnd: document.getElementById('customTimeEnd'),
+    applyCustomTime: document.getElementById('applyCustomTime'),
+    
+    // History & Favorites
+    historySection: document.getElementById('historySection'),
+    clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+    
+    // AI Chat
+    chatModal: document.getElementById('chatModal'),
+    chatBtn: document.getElementById('chatModeBtn'),
+    closeChatBtn: document.getElementById('closeChatBtn'),
+    chatMessages: document.getElementById('chatMessages'),
+    chatInput: document.getElementById('chatInput'),
+    sendChatBtn: document.getElementById('sendChatBtn'),
+    
     // Status
     connectionStatus: document.getElementById('connectionStatus'),
     currentTime: document.getElementById('currentTime'),
@@ -83,6 +114,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     startClock();
     createParticles();
+    loadHistoryFromStorage();
+    loadFavoritesFromStorage();
 });
 
 async function initializeApp() {
@@ -141,6 +174,15 @@ function setupEventListeners() {
     if (elements.closeInsightsBtn) {
         elements.closeInsightsBtn.addEventListener('click', closeAiInsights);
     }
+    
+    // Time Range Picker
+    setupTimeRangePicker();
+    
+    // History & Favorites
+    setupHistoryAndFavorites();
+    
+    // AI Chat Mode
+    setupChatMode();
     
     // Toggle tables panel minimize/maximize
     const toggleTablesBtn = document.getElementById('toggleTablesBtn');
@@ -211,6 +253,10 @@ async function executeNaturalQuery() {
         state.lastResults = data.results;
         state.lastColumns = data.columns;
         
+        // Store current state for chat context
+        state.currentKql = data.kql;
+        state.currentResults = data.results;
+        
         // Show generated KQL
         displayKql(data.kql);
         
@@ -219,6 +265,9 @@ async function executeNaturalQuery() {
         
         // Update stats
         updateStats(queryTime, data.row_count);
+        
+        // Add to query history
+        addToHistory(question, data.kql, data.row_count);
         
         showToast(`Query completed: ${data.row_count} records found`, 'success');
         
@@ -766,6 +815,444 @@ function createParticles() {
 }
 
 // ================================================
+// Time Range Picker
+// ================================================
+
+function setupTimeRangePicker() {
+    // Time range button clicks
+    document.querySelectorAll('.time-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.selectedTimeRange = btn.dataset.range;
+            
+            // Hide custom picker if preset selected
+            if (state.selectedTimeRange !== 'custom') {
+                elements.customTimePicker?.classList.add('hidden');
+            }
+        });
+    });
+    
+    // Custom range button
+    elements.customTimeBtn?.addEventListener('click', () => {
+        document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+        elements.customTimeBtn.classList.add('active');
+        state.selectedTimeRange = 'custom';
+        elements.customTimePicker?.classList.remove('hidden');
+    });
+    
+    // Apply custom time
+    elements.applyCustomTime?.addEventListener('click', () => {
+        const start = elements.customTimeStart?.value;
+        const end = elements.customTimeEnd?.value;
+        if (start && end) {
+            state.customTimeStart = start;
+            state.customTimeEnd = end;
+            showNotification('Custom time range applied', 'success');
+        } else {
+            showNotification('Please select both start and end times', 'warning');
+        }
+    });
+}
+
+function getTimeRangeFilter() {
+    const now = new Date();
+    let startTime;
+    
+    switch (state.selectedTimeRange) {
+        case '1h':
+            startTime = new Date(now - 60 * 60 * 1000);
+            break;
+        case '6h':
+            startTime = new Date(now - 6 * 60 * 60 * 1000);
+            break;
+        case '24h':
+            startTime = new Date(now - 24 * 60 * 60 * 1000);
+            break;
+        case '7d':
+            startTime = new Date(now - 7 * 24 * 60 * 60 * 1000);
+            break;
+        case '30d':
+            startTime = new Date(now - 30 * 24 * 60 * 60 * 1000);
+            break;
+        case 'custom':
+            if (state.customTimeStart && state.customTimeEnd) {
+                return `| where TimeGenerated between (datetime('${state.customTimeStart}') .. datetime('${state.customTimeEnd}'))`;
+            }
+            return '';
+        default:
+            return '';
+    }
+    
+    return startTime ? `| where TimeGenerated >= datetime('${startTime.toISOString()}')` : '';
+}
+
+// ================================================
+// Query History & Favorites
+// ================================================
+
+function setupHistoryAndFavorites() {
+    // Load from localStorage
+    loadHistoryFromStorage();
+    loadFavoritesFromStorage();
+    
+    // Tab switching
+    document.querySelectorAll('.history-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.history-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            const tabType = tab.dataset.tab;
+            document.querySelectorAll('.history-content').forEach(content => {
+                content.classList.toggle('hidden', content.id !== `${tabType}-list`);
+            });
+        });
+    });
+    
+    // Clear history button
+    elements.clearHistoryBtn?.addEventListener('click', () => {
+        if (confirm('Clear all query history?')) {
+            state.queryHistory = [];
+            saveHistoryToStorage();
+            renderHistory();
+            showNotification('History cleared', 'success');
+        }
+    });
+    
+    // Initial render
+    renderHistory();
+    renderFavorites();
+}
+
+function loadHistoryFromStorage() {
+    try {
+        const saved = localStorage.getItem('azureLogAnalyzer_history');
+        state.queryHistory = saved ? JSON.parse(saved) : [];
+    } catch (e) {
+        state.queryHistory = [];
+    }
+}
+
+function saveHistoryToStorage() {
+    try {
+        localStorage.setItem('azureLogAnalyzer_history', JSON.stringify(state.queryHistory.slice(0, 50)));
+    } catch (e) {
+        console.warn('Failed to save history:', e);
+    }
+}
+
+function loadFavoritesFromStorage() {
+    try {
+        const saved = localStorage.getItem('azureLogAnalyzer_favorites');
+        state.favorites = saved ? JSON.parse(saved) : [];
+    } catch (e) {
+        state.favorites = [];
+    }
+}
+
+function saveFavoritesToStorage() {
+    try {
+        localStorage.setItem('azureLogAnalyzer_favorites', JSON.stringify(state.favorites));
+    } catch (e) {
+        console.warn('Failed to save favorites:', e);
+    }
+}
+
+function addToHistory(query, kql, resultCount) {
+    const entry = {
+        id: Date.now(),
+        query: query,
+        kql: kql,
+        resultCount: resultCount,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Remove duplicate if exists
+    state.queryHistory = state.queryHistory.filter(h => h.query !== query);
+    
+    // Add to front
+    state.queryHistory.unshift(entry);
+    
+    // Keep max 50
+    state.queryHistory = state.queryHistory.slice(0, 50);
+    
+    saveHistoryToStorage();
+    renderHistory();
+}
+
+function toggleFavorite(query, kql) {
+    const exists = state.favorites.find(f => f.query === query);
+    
+    if (exists) {
+        state.favorites = state.favorites.filter(f => f.query !== query);
+        showNotification('Removed from favorites', 'info');
+    } else {
+        state.favorites.unshift({
+            id: Date.now(),
+            query: query,
+            kql: kql,
+            timestamp: new Date().toISOString()
+        });
+        showNotification('Added to favorites', 'success');
+    }
+    
+    saveFavoritesToStorage();
+    renderFavorites();
+    renderHistory(); // Update star icons
+}
+
+function isFavorite(query) {
+    return state.favorites.some(f => f.query === query);
+}
+
+function renderHistory() {
+    const container = document.getElementById('history-list');
+    if (!container) return;
+    
+    if (state.queryHistory.length === 0) {
+        container.innerHTML = '<div class="empty-state">No query history yet</div>';
+        return;
+    }
+    
+    container.innerHTML = state.queryHistory.map(item => `
+        <div class="history-item">
+            <div class="history-item-content" onclick="runHistoryQuery('${escapeHtml(item.query)}')">
+                <div class="history-query">${escapeHtml(item.query)}</div>
+                <div class="history-meta">
+                    <span>${formatTimeAgo(item.timestamp)}</span>
+                    <span>${item.resultCount || 0} results</span>
+                </div>
+            </div>
+            <button class="favorite-btn ${isFavorite(item.query) ? 'active' : ''}" 
+                    onclick="toggleFavorite('${escapeHtml(item.query)}', '${escapeHtml(item.kql || '')}')">
+                ★
+            </button>
+        </div>
+    `).join('');
+}
+
+function renderFavorites() {
+    const container = document.getElementById('favorites-list');
+    if (!container) return;
+    
+    if (state.favorites.length === 0) {
+        container.innerHTML = '<div class="empty-state">No favorites yet. Star a query to save it.</div>';
+        return;
+    }
+    
+    container.innerHTML = state.favorites.map(item => `
+        <div class="history-item">
+            <div class="history-item-content" onclick="runHistoryQuery('${escapeHtml(item.query)}')">
+                <div class="history-query">${escapeHtml(item.query)}</div>
+                <div class="history-meta">
+                    <span>Saved ${formatTimeAgo(item.timestamp)}</span>
+                </div>
+            </div>
+            <button class="favorite-btn active" 
+                    onclick="toggleFavorite('${escapeHtml(item.query)}', '${escapeHtml(item.kql || '')}')">
+                ★
+            </button>
+        </div>
+    `).join('');
+}
+
+function runHistoryQuery(query) {
+    elements.queryInput.value = query;
+    executeNaturalQuery();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML.replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+function formatTimeAgo(timestamp) {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diff = Math.floor((now - then) / 1000);
+    
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    return then.toLocaleDateString();
+}
+
+// ================================================
+// AI Chat Mode
+// ================================================
+
+function setupChatMode() {
+    // Open chat button
+    elements.chatBtn?.addEventListener('click', openChatModal);
+    
+    // Close chat
+    elements.closeChatBtn?.addEventListener('click', closeChatModal);
+    
+    // Send message
+    elements.sendChatBtn?.addEventListener('click', sendChatMessage);
+    
+    // Enter to send
+    elements.chatInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
+    
+    // Close on backdrop click
+    elements.chatModal?.addEventListener('click', (e) => {
+        if (e.target === elements.chatModal) {
+            closeChatModal();
+        }
+    });
+}
+
+function openChatModal() {
+    if (!elements.chatModal) return;
+    
+    elements.chatModal.classList.remove('hidden');
+    elements.chatInput?.focus();
+    
+    // Update context info
+    updateChatContext();
+    
+    // Show welcome message if first time
+    if (state.chatHistory.length === 0) {
+        addChatMessage('assistant', 'Hello! I can help you analyze your Azure logs. Ask me questions about your query results, request summaries, or ask for specific insights.');
+    }
+}
+
+function closeChatModal() {
+    elements.chatModal?.classList.add('hidden');
+}
+
+function updateChatContext() {
+    const contextEl = document.getElementById('chat-context-info');
+    if (!contextEl) return;
+    
+    const hasResults = state.currentResults && state.currentResults.length > 0;
+    const hasKql = state.currentKql;
+    
+    if (hasResults) {
+        contextEl.innerHTML = `
+            <strong>Context:</strong> ${state.currentResults.length} results from query
+            ${hasKql ? `<br><code style="font-size: 0.75rem;">${state.currentKql.substring(0, 80)}...</code>` : ''}
+        `;
+    } else {
+        contextEl.innerHTML = '<em>No query results loaded. Run a query first for context-aware chat.</em>';
+    }
+}
+
+async function sendChatMessage() {
+    const input = elements.chatInput;
+    const message = input?.value?.trim();
+    
+    if (!message) return;
+    
+    // Add user message
+    addChatMessage('user', message);
+    input.value = '';
+    
+    // Show typing indicator
+    const typingId = addChatMessage('assistant', '<div class="typing-indicator"><span></span><span></span><span></span></div>', true);
+    
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                context: {
+                    kql: state.currentKql,
+                    results: state.currentResults?.slice(0, 20), // Send first 20 results for context
+                    resultCount: state.currentResults?.length || 0
+                },
+                history: state.chatHistory.slice(-10) // Last 10 messages for context
+            })
+        });
+        
+        // Remove typing indicator
+        removeChatMessage(typingId);
+        
+        if (!response.ok) {
+            throw new Error('Chat request failed');
+        }
+        
+        const data = await response.json();
+        
+        // Add assistant response
+        addChatMessage('assistant', data.response);
+        
+        // Handle suggested queries if any
+        if (data.suggestedQueries && data.suggestedQueries.length > 0) {
+            addSuggestedQueries(data.suggestedQueries);
+        }
+        
+    } catch (error) {
+        removeChatMessage(typingId);
+        addChatMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+        console.error('Chat error:', error);
+    }
+}
+
+function addChatMessage(role, content, isTemp = false) {
+    const container = elements.chatMessages;
+    if (!container) return null;
+    
+    const msgId = `msg-${Date.now()}`;
+    const div = document.createElement('div');
+    div.className = `chat-message ${role}`;
+    div.id = msgId;
+    
+    if (isTemp) {
+        div.innerHTML = content;
+    } else {
+        // Simple markdown-like formatting
+        let formatted = content
+            .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>');
+        
+        div.innerHTML = `<div class="message-content">${formatted}</div>`;
+        
+        // Save to history (not temp messages)
+        state.chatHistory.push({ role, content });
+    }
+    
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    
+    return msgId;
+}
+
+function removeChatMessage(msgId) {
+    document.getElementById(msgId)?.remove();
+}
+
+function addSuggestedQueries(queries) {
+    const container = elements.chatMessages;
+    if (!container || !queries.length) return;
+    
+    const div = document.createElement('div');
+    div.className = 'suggested-queries';
+    div.innerHTML = `
+        <div class="suggested-label">Suggested queries:</div>
+        ${queries.map(q => `<button class="suggested-query-btn" onclick="useSuggestedQuery('${escapeHtml(q)}')">${escapeHtml(q)}</button>`).join('')}
+    `;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function useSuggestedQuery(query) {
+    closeChatModal();
+    elements.queryInput.value = query;
+    executeNaturalQuery();
+}
+
+// ================================================
 // Keyboard Shortcuts
 // ================================================
 
@@ -778,14 +1265,24 @@ document.addEventListener('keydown', (e) => {
         }
     }
     
-    // Escape to clear
+    // Escape to close modals or clear
     if (e.key === 'Escape') {
-        clearInput();
+        if (elements.chatModal && !elements.chatModal.classList.contains('hidden')) {
+            closeChatModal();
+        } else {
+            clearInput();
+        }
     }
     
     // Focus input with /
     if (e.key === '/' && document.activeElement !== elements.queryInput) {
         e.preventDefault();
         elements.queryInput.focus();
+    }
+    
+    // Ctrl+H for history
+    if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+        e.preventDefault();
+        document.querySelector('.history-tab[data-tab="history"]')?.click();
     }
 });
