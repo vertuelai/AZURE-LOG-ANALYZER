@@ -98,6 +98,7 @@ def natural_language_query():
     try:
         data = request.get_json()
         question = data.get('question', '')
+        time_filter = data.get('timeFilter', '')
         
         if not question:
             return jsonify({'error': 'Question is required'}), 400
@@ -108,6 +109,15 @@ def natural_language_query():
         
         # Translate to KQL
         kql = log_analyzer.translator.translate(question, log_analyzer.available_tables)
+        
+        # Apply time filter if provided
+        if time_filter:
+            # Insert time filter after the table name (first line)
+            lines = kql.strip().split('\n')
+            if len(lines) > 0:
+                # Insert time filter after first line (table name)
+                lines.insert(1, time_filter)
+                kql = '\n'.join(lines)
         
         # Execute query
         df = log_analyzer.client.query(kql)

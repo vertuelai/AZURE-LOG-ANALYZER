@@ -1,6 +1,6 @@
-# 🔍 Azure Log Analytics Analyzer
+# 🔍 ADIC LogAssist AI
 
-A powerful tool to query Azure Log Analytics using **natural language** or **KQL (Kusto Query Language)**.
+A powerful tool to query Azure Log Analytics using **natural language** or **KQL (Kusto Query Language)**. From Natural Language to Insight in Seconds.
 
 ## ✨ Features
 
@@ -9,6 +9,9 @@ A powerful tool to query Azure Log Analytics using **natural language** or **KQL
 - **🆕 Custom Instructions**: Define business rules and mappings for query translation
 - **Interactive CLI**: User-friendly command-line interface
 - **🆕 Futuristic Web UI**: Beautiful, modern web interface with real-time analytics
+- **🆕 Time Range Picker**: Quick preset time ranges (1H, 6H, 24H, 7D, 30D) or custom
+- **🆕 Query History & Favorites**: Save and recall your most-used queries
+- **🆕 AI Chat Mode**: Have a conversation about your log data
 - **KQL Support**: Run raw KQL queries directly
 - **Table Discovery**: List available tables and view schemas
 - **Export Results**: Save results to CSV or JSON

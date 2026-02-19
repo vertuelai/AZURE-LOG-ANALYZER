@@ -131,9 +131,6 @@ async function initializeApp() {
             
             // Load tables
             loadTables();
-            
-            // Load sample queries
-            loadSampleQueries();
         } else {
             updateConnectionStatus(false);
             showToast('Configuration Error: ' + (config.error || 'Check your .env file'), 'error');
@@ -233,10 +230,13 @@ async function executeNaturalQuery() {
     const startTime = performance.now();
     
     try {
+        // Get time range filter
+        const timeFilter = getTimeRangeFilter();
+        
         const response = await fetch(`${API_BASE}/api/query/natural`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question })
+            body: JSON.stringify({ question, timeFilter })
         });
         
         const data = await response.json();
@@ -378,19 +378,6 @@ async function loadTableSchema(tableName) {
         displaySchema(tableName, data.schema);
     } catch (error) {
         showToast('Failed to load schema', 'error');
-    }
-}
-
-async function loadSampleQueries() {
-    try {
-        const response = await fetch(`${API_BASE}/api/sample-queries`);
-        const data = await response.json();
-        
-        if (data.samples) {
-            renderSampleQueries(data.samples);
-        }
-    } catch (error) {
-        console.error('Failed to load sample queries:', error);
     }
 }
 
@@ -650,25 +637,6 @@ function closeSchema() {
     elements.schemaSection.style.display = 'none';
 }
 
-function renderSampleQueries(samples) {
-    const queries = [];
-    samples.forEach(category => {
-        category.queries.slice(0, 2).forEach(q => queries.push(q));
-    });
-    
-    elements.sampleChips.innerHTML = queries.slice(0, 6).map(query => `
-        <span class="sample-chip">${escapeHtml(truncate(query, 35))}</span>
-    `).join('');
-    
-    // Add click handlers
-    elements.sampleChips.querySelectorAll('.sample-chip').forEach((chip, index) => {
-        chip.addEventListener('click', () => {
-            elements.queryInput.value = queries[index];
-            elements.queryInput.focus();
-        });
-    });
-}
-
 function showLoading() {
     elements.emptyState.style.display = 'none';
     elements.resultsWrapper.style.display = 'none';
@@ -926,7 +894,7 @@ function setupHistoryAndFavorites() {
 
 function loadHistoryFromStorage() {
     try {
-        const saved = localStorage.getItem('azureLogAnalyzer_history');
+        const saved = localStorage.getItem('adicLogAssist_history');
         state.queryHistory = saved ? JSON.parse(saved) : [];
     } catch (e) {
         state.queryHistory = [];
@@ -935,7 +903,7 @@ function loadHistoryFromStorage() {
 
 function saveHistoryToStorage() {
     try {
-        localStorage.setItem('azureLogAnalyzer_history', JSON.stringify(state.queryHistory.slice(0, 50)));
+        localStorage.setItem('adicLogAssist_history', JSON.stringify(state.queryHistory.slice(0, 50)));
     } catch (e) {
         console.warn('Failed to save history:', e);
     }
@@ -943,7 +911,7 @@ function saveHistoryToStorage() {
 
 function loadFavoritesFromStorage() {
     try {
-        const saved = localStorage.getItem('azureLogAnalyzer_favorites');
+        const saved = localStorage.getItem('adicLogAssist_favorites');
         state.favorites = saved ? JSON.parse(saved) : [];
     } catch (e) {
         state.favorites = [];
@@ -952,7 +920,7 @@ function loadFavoritesFromStorage() {
 
 function saveFavoritesToStorage() {
     try {
-        localStorage.setItem('azureLogAnalyzer_favorites', JSON.stringify(state.favorites));
+        localStorage.setItem('adicLogAssist_favorites', JSON.stringify(state.favorites));
     } catch (e) {
         console.warn('Failed to save favorites:', e);
     }
@@ -1014,21 +982,36 @@ function renderHistory() {
         return;
     }
     
-    container.innerHTML = state.queryHistory.map(item => `
+    container.innerHTML = state.queryHistory.map((item, index) => `
         <div class="history-item">
-            <div class="history-item-content" onclick="runHistoryQuery('${escapeHtml(item.query)}')">
+            <div class="history-item-content" data-index="${index}" data-type="history">
                 <div class="history-query">${escapeHtml(item.query)}</div>
                 <div class="history-meta">
                     <span>${formatTimeAgo(item.timestamp)}</span>
                     <span>${item.resultCount || 0} results</span>
                 </div>
             </div>
-            <button class="favorite-btn ${isFavorite(item.query) ? 'active' : ''}" 
-                    onclick="toggleFavorite('${escapeHtml(item.query)}', '${escapeHtml(item.kql || '')}')">
+            <button class="favorite-btn ${isFavorite(item.query) ? 'active' : ''}" data-index="${index}" data-type="history-fav">
                 ★
             </button>
         </div>
     `).join('');
+    
+    // Attach click handlers
+    container.querySelectorAll('.history-item-content').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = parseInt(el.dataset.index);
+            runHistoryQuery(state.queryHistory[idx].query);
+        });
+    });
+    container.querySelectorAll('.favorite-btn').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = parseInt(el.dataset.index);
+            const item = state.queryHistory[idx];
+            toggleFavorite(item.query, item.kql || '');
+        });
+    });
 }
 
 function renderFavorites() {
@@ -1040,20 +1023,35 @@ function renderFavorites() {
         return;
     }
     
-    container.innerHTML = state.favorites.map(item => `
+    container.innerHTML = state.favorites.map((item, index) => `
         <div class="history-item">
-            <div class="history-item-content" onclick="runHistoryQuery('${escapeHtml(item.query)}')">
+            <div class="history-item-content" data-index="${index}" data-type="favorite">
                 <div class="history-query">${escapeHtml(item.query)}</div>
                 <div class="history-meta">
                     <span>Saved ${formatTimeAgo(item.timestamp)}</span>
                 </div>
             </div>
-            <button class="favorite-btn active" 
-                    onclick="toggleFavorite('${escapeHtml(item.query)}', '${escapeHtml(item.kql || '')}')">
+            <button class="favorite-btn active" data-index="${index}" data-type="favorite-fav">
                 ★
             </button>
         </div>
     `).join('');
+    
+    // Attach click handlers
+    container.querySelectorAll('.history-item-content').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = parseInt(el.dataset.index);
+            runHistoryQuery(state.favorites[idx].query);
+        });
+    });
+    container.querySelectorAll('.favorite-btn').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = parseInt(el.dataset.index);
+            const item = state.favorites[idx];
+            toggleFavorite(item.query, item.kql || '');
+        });
+    });
 }
 
 function runHistoryQuery(query) {
@@ -1062,9 +1060,13 @@ function runHistoryQuery(query) {
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text || '';
-    return div.innerHTML.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function formatTimeAgo(timestamp) {
