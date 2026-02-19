@@ -22,6 +22,7 @@ let state = {
     currentResults: null,
     // New state for features
     selectedTimeRange: '24h',
+    timeRangeManuallySet: false, // Track if user manually selected time range
     customTimeStart: null,
     customTimeEnd: null,
     queryHistory: [],
@@ -55,6 +56,14 @@ const elements = {
     rowCount: document.getElementById('rowCount'),
     exportCsvBtn: document.getElementById('exportCsvBtn'),
     exportJsonBtn: document.getElementById('exportJsonBtn'),
+    exportPdfBtn: document.getElementById('exportPdfBtn'),
+    
+    // Chart
+    showChartBtn: document.getElementById('showChartBtn'),
+    chartContainer: document.getElementById('chartContainer'),
+    chartType: document.getElementById('chartType'),
+    closeChartBtn: document.getElementById('closeChartBtn'),
+    resultsChart: document.getElementById('resultsChart'),
     
     // Tables
     tablesList: document.getElementById('tablesList'),
@@ -158,6 +167,28 @@ function setupEventListeners() {
     // Export buttons
     elements.exportCsvBtn.addEventListener('click', () => exportResults('csv'));
     elements.exportJsonBtn.addEventListener('click', () => exportResults('json'));
+    if (document.getElementById('exportPdfBtn')) {
+        document.getElementById('exportPdfBtn').addEventListener('click', () => exportToPdf());
+    }
+    
+    // Chart controls
+    const showChartBtn = document.getElementById('showChartBtn');
+    const closeChartBtn = document.getElementById('closeChartBtn');
+    const chartType = document.getElementById('chartType');
+    const toggleViewBtn = document.getElementById('toggleViewBtn');
+    
+    if (showChartBtn) {
+        showChartBtn.addEventListener('click', showChart);
+    }
+    if (toggleViewBtn) {
+        toggleViewBtn.addEventListener('click', toggleChartView);
+    }
+    if (closeChartBtn) {
+        closeChartBtn.addEventListener('click', hideChart);
+    }
+    if (chartType) {
+        chartType.addEventListener('change', updateChart);
+    }
     
     // Tables
     elements.refreshTablesBtn.addEventListener('click', loadTables);
@@ -395,6 +426,94 @@ async function exportResults(format) {
     }
 }
 
+async function exportToPdf() {
+    if (!state.lastResults || state.lastResults.length === 0) {
+        showToast('No results to export', 'info');
+        return;
+    }
+    
+    showToast('Generating PDF...', 'info');
+    
+    try {
+        // Create a printable HTML document
+        const printWindow = window.open('', '_blank');
+        const columns = state.lastColumns || Object.keys(state.lastResults[0]);
+        
+        let tableHtml = '<table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 10px;">';
+        
+        // Header
+        tableHtml += '<thead><tr style="background: #1a1a2e; color: #00f0ff;">';
+        columns.forEach(col => {
+            tableHtml += `<th style="border: 1px solid #333; padding: 8px; text-align: left;">${col}</th>`;
+        });
+        tableHtml += '</tr></thead>';
+        
+        // Body
+        tableHtml += '<tbody>';
+        state.lastResults.forEach((row, idx) => {
+            const bgColor = idx % 2 === 0 ? '#0a0a1a' : '#12122a';
+            tableHtml += `<tr style="background: ${bgColor}; color: #e0e0e0;">`;
+            columns.forEach(col => {
+                let value = row[col];
+                if (value === null || value === undefined) value = '';
+                if (typeof value === 'object') value = JSON.stringify(value);
+                // Truncate long values
+                const displayValue = String(value).length > 100 ? String(value).substring(0, 100) + '...' : String(value);
+                tableHtml += `<td style="border: 1px solid #333; padding: 6px; max-width: 200px; word-wrap: break-word;">${displayValue}</td>`;
+            });
+            tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table>';
+        
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>ADIC LogAssist AI - Export</title>
+                <style>
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        margin: 20px; 
+                        background: #0a0a1a; 
+                        color: #e0e0e0;
+                    }
+                    h1 { color: #00f0ff; font-size: 18px; }
+                    .meta { color: #888; font-size: 12px; margin-bottom: 20px; }
+                    @media print {
+                        body { background: white; color: black; }
+                        table { font-size: 8px; }
+                        th { background: #333 !important; color: white !important; }
+                        tr { background: white !important; color: black !important; }
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>ADIC LogAssist AI - Query Results</h1>
+                <div class="meta">
+                    <p>Exported: ${new Date().toLocaleString()}</p>
+                    <p>Total Records: ${state.lastResults.length}</p>
+                    ${state.lastKql ? `<p>Query: <code>${state.lastKql.substring(0, 200)}...</code></p>` : ''}
+                </div>
+                ${tableHtml}
+                <script>
+                    window.onload = function() {
+                        window.print();
+                    }
+                </script>
+            </body>
+            </html>
+        `;
+        
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        
+        showToast('PDF ready - use Print dialog to save as PDF', 'success');
+    } catch (error) {
+        console.error('PDF export error:', error);
+        showToast('PDF export failed', 'error');
+    }
+}
+
 // ================================================
 // UI Functions
 // ================================================
@@ -407,6 +526,140 @@ function hideChart() {
     const chartContainer = document.getElementById('chartContainer');
     if (chartContainer) {
         chartContainer.style.display = 'none';
+    }
+}
+
+function showChart() {
+    if (!state.lastResults || state.lastResults.length === 0) {
+        showToast('No data to visualize', 'info');
+        return;
+    }
+    
+    const chartContainer = document.getElementById('chartContainer');
+    if (chartContainer) {
+        chartContainer.style.display = 'block';
+    }
+    
+    updateChart();
+}
+
+function updateChart() {
+    const canvas = document.getElementById('resultsChart');
+    const chartTypeSelect = document.getElementById('chartType');
+    if (!canvas || !state.lastResults || state.lastResults.length === 0) return;
+    
+    // Destroy existing chart
+    if (state.currentChart) {
+        state.currentChart.destroy();
+    }
+    
+    const chartType = chartTypeSelect?.value || 'bar';
+    const results = state.lastResults;
+    const columns = state.lastColumns || Object.keys(results[0]);
+    
+    // Find suitable columns for charting
+    // Look for a label column (string) and value columns (numeric)
+    let labelColumn = null;
+    let valueColumns = [];
+    
+    columns.forEach(col => {
+        const sampleValue = results[0][col];
+        if (typeof sampleValue === 'number') {
+            valueColumns.push(col);
+        } else if (!labelColumn && typeof sampleValue === 'string') {
+            labelColumn = col;
+        }
+    });
+    
+    // If no numeric columns, try to count occurrences
+    if (valueColumns.length === 0) {
+        // Create a count-based chart
+        const countColumn = labelColumn || columns[0];
+        const counts = {};
+        results.forEach(row => {
+            const key = String(row[countColumn] || 'Unknown').substring(0, 30);
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        
+        const labels = Object.keys(counts).slice(0, 20);
+        const data = labels.map(l => counts[l]);
+        
+        createChart(canvas, chartType, labels, [{ label: 'Count', data }]);
+    } else {
+        // Use numeric columns
+        const labels = results.slice(0, 50).map((row, i) => {
+            if (labelColumn) {
+                return String(row[labelColumn] || '').substring(0, 20);
+            }
+            return `Row ${i + 1}`;
+        });
+        
+        const datasets = valueColumns.slice(0, 3).map((col, idx) => ({
+            label: col,
+            data: results.slice(0, 50).map(row => row[col] || 0)
+        }));
+        
+        createChart(canvas, chartType, labels, datasets);
+    }
+}
+
+function createChart(canvas, type, labels, datasets) {
+    const colors = [
+        { bg: 'rgba(0, 240, 255, 0.6)', border: '#00f0ff' },
+        { bg: 'rgba(180, 0, 255, 0.6)', border: '#b400ff' },
+        { bg: 'rgba(0, 255, 136, 0.6)', border: '#00ff88' },
+        { bg: 'rgba(255, 107, 53, 0.6)', border: '#ff6b35' }
+    ];
+    
+    const chartDatasets = datasets.map((ds, idx) => {
+        const colorIdx = idx % colors.length;
+        return {
+            label: ds.label,
+            data: ds.data,
+            backgroundColor: type === 'pie' ? 
+                ds.data.map((_, i) => colors[i % colors.length].bg) : 
+                colors[colorIdx].bg,
+            borderColor: type === 'pie' ? 
+                ds.data.map((_, i) => colors[i % colors.length].border) : 
+                colors[colorIdx].border,
+            borderWidth: 2
+        };
+    });
+    
+    state.currentChart = new Chart(canvas, {
+        type: type,
+        data: {
+            labels: labels,
+            datasets: chartDatasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#e0e0e0' }
+                }
+            },
+            scales: type !== 'pie' ? {
+                x: {
+                    ticks: { color: '#a0a0c0' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                },
+                y: {
+                    ticks: { color: '#a0a0c0' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                }
+            } : {}
+        }
+    });
+}
+
+function toggleChartView() {
+    const chartContainer = document.getElementById('chartContainer');
+    if (chartContainer && chartContainer.style.display !== 'none') {
+        hideChart();
+    } else {
+        showChart();
     }
 }
 
@@ -793,6 +1046,7 @@ function setupTimeRangePicker() {
             document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             state.selectedTimeRange = btn.dataset.range;
+            state.timeRangeManuallySet = true; // User manually selected a time range
             
             // Hide custom picker if preset selected
             if (state.selectedTimeRange !== 'custom') {
@@ -806,6 +1060,7 @@ function setupTimeRangePicker() {
         document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
         elements.customTimeBtn.classList.add('active');
         state.selectedTimeRange = 'custom';
+        state.timeRangeManuallySet = true;
         elements.customTimePicker?.classList.remove('hidden');
     });
     
@@ -824,6 +1079,12 @@ function setupTimeRangePicker() {
 }
 
 function getTimeRangeFilter() {
+    // Only apply time filter if NOT using default 24h (AI already handles common time ranges)
+    // or if user explicitly selected a different time range
+    if (!state.timeRangeManuallySet) {
+        return ''; // Don't add filter, let AI handle it
+    }
+    
     const now = new Date();
     let startTime;
     
@@ -1187,7 +1448,12 @@ async function sendChatMessage() {
         // Add assistant response
         addChatMessage('assistant', data.response);
         
-        // Handle suggested queries if any
+        // Handle suggested query from AI (single query)
+        if (data.suggested_query) {
+            addSuggestedQueryButton(data.suggested_query);
+        }
+        
+        // Handle suggested queries array if any
         if (data.suggestedQueries && data.suggestedQueries.length > 0) {
             addSuggestedQueries(data.suggestedQueries);
         }
@@ -1232,6 +1498,32 @@ function addChatMessage(role, content, isTemp = false) {
 
 function removeChatMessage(msgId) {
     document.getElementById(msgId)?.remove();
+}
+
+function addSuggestedQueryButton(query) {
+    const container = elements.chatMessages;
+    if (!container || !query) return;
+    
+    const div = document.createElement('div');
+    div.className = 'suggested-queries';
+    div.innerHTML = `
+        <div class="suggested-label">Suggested query:</div>
+        <div class="suggested-query-code"><code>${escapeHtml(query)}</code></div>
+        <button class="suggested-query-btn run-query-btn" data-query="${escapeHtml(query)}">
+            <i class="fas fa-play"></i> Run this query
+        </button>
+    `;
+    
+    // Add click handler
+    div.querySelector('.run-query-btn').addEventListener('click', function() {
+        const q = this.dataset.query;
+        closeChatModal();
+        elements.queryInput.value = q;
+        executeNaturalQuery();
+    });
+    
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
 }
 
 function addSuggestedQueries(queries) {

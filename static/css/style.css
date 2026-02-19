@@ -1920,6 +1920,39 @@ body {
     color: var(--bg-dark);
 }
 
+.suggested-query-btn.run-query-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    background: var(--primary);
+    color: var(--bg-dark);
+    border-color: var(--primary);
+    font-weight: 600;
+    margin-top: var(--spacing-sm);
+}
+
+.suggested-query-btn.run-query-btn:hover {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+.suggested-query-code {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm);
+    margin: var(--spacing-sm) 0;
+    overflow-x: auto;
+}
+
+.suggested-query-code code {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent-green);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 /* Chat Button in Query Actions */
 .chat-btn {
     display: flex;
