@@ -1071,20 +1071,15 @@ function setupTimeRangePicker() {
         if (start && end) {
             state.customTimeStart = start;
             state.customTimeEnd = end;
-            showNotification('Custom time range applied', 'success');
+            showToast('Custom time range applied', 'success');
         } else {
-            showNotification('Please select both start and end times', 'warning');
+            showToast('Please select both start and end times', 'warning');
         }
     });
 }
 
 function getTimeRangeFilter() {
-    // Only apply time filter if NOT using default 24h (AI already handles common time ranges)
-    // or if user explicitly selected a different time range
-    if (!state.timeRangeManuallySet) {
-        return ''; // Don't add filter, let AI handle it
-    }
-    
+    // Always apply the selected time range filter
     const now = new Date();
     let startTime;
     
@@ -1108,9 +1103,11 @@ function getTimeRangeFilter() {
             if (state.customTimeStart && state.customTimeEnd) {
                 return `| where TimeGenerated between (datetime('${state.customTimeStart}') .. datetime('${state.customTimeEnd}'))`;
             }
-            return '';
+            // Fall back to 24h if custom not set
+            startTime = new Date(now - 24 * 60 * 60 * 1000);
+            break;
         default:
-            return '';
+            startTime = new Date(now - 24 * 60 * 60 * 1000);
     }
     
     return startTime ? `| where TimeGenerated >= datetime('${startTime.toISOString()}')` : '';
@@ -1144,7 +1141,7 @@ function setupHistoryAndFavorites() {
             state.queryHistory = [];
             saveHistoryToStorage();
             renderHistory();
-            showNotification('History cleared', 'success');
+            showToast('History cleared', 'success');
         }
     });
     
@@ -1214,7 +1211,7 @@ function toggleFavorite(query, kql) {
     
     if (exists) {
         state.favorites = state.favorites.filter(f => f.query !== query);
-        showNotification('Removed from favorites', 'info');
+        showToast('Removed from favorites', 'info');
     } else {
         state.favorites.unshift({
             id: Date.now(),
@@ -1222,7 +1219,7 @@ function toggleFavorite(query, kql) {
             kql: kql,
             timestamp: new Date().toISOString()
         });
-        showNotification('Added to favorites', 'success');
+        showToast('Added to favorites', 'success');
     }
     
     saveFavoritesToStorage();

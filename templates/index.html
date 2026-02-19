@@ -71,6 +71,9 @@
                         <button class="control-btn" id="exportJsonBtn" title="Export JSON">
                             <i class="fas fa-file-code"></i>
                         </button>
+                        <button class="control-btn" id="exportPdfBtn" title="Export PDF">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
                         <button class="control-btn" id="fullscreenBtn" title="Fullscreen">
                             <i class="fas fa-expand" id="fullscreenIcon"></i>
                         </button>
@@ -257,59 +260,6 @@
                     </div>
                     <div class="history-content hidden" id="favorites-list">
                         <!-- Populated by JS -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- Center Panel - Results -->
-            <section class="panel results-panel">
-                <div class="panel-header">
-                    <div class="panel-title">
-                        <i class="fas fa-database"></i>
-                        <span>DATA STREAM</span>
-                    </div>
-                    <div class="panel-info">
-                        <span class="row-count" id="rowCount">0 records</span>
-                    </div>
-                    <div class="panel-controls">
-                        <button class="control-btn" id="exportCsvBtn" title="Export CSV">
-                            <i class="fas fa-file-csv"></i>
-                        </button>
-                        <button class="control-btn" id="exportJsonBtn" title="Export JSON">
-                            <i class="fas fa-file-code"></i>
-                        </button>
-                        <button class="control-btn" id="exportPdfBtn" title="Export PDF">
-                            <i class="fas fa-file-pdf"></i>
-                        </button>
-                        <button class="control-btn" id="toggleViewBtn" title="Show Chart">
-                            <i class="fas fa-chart-bar"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="results-container" id="resultsContainer">
-                    <div class="empty-state" id="emptyState">
-                        <div class="empty-icon">
-                            <i class="fas fa-satellite-dish"></i>
-                        </div>
-                        <h3>AWAITING DATA TRANSMISSION</h3>
-                        <p>Enter a query to begin analyzing your Azure logs</p>
-                    </div>
-                    
-                    <div class="loading-state" id="loadingState" style="display: none;">
-                        <div class="loader">
-                            <div class="loader-ring"></div>
-                            <div class="loader-ring"></div>
-                            <div class="loader-ring"></div>
-                        </div>
-                        <p>PROCESSING QUANTUM DATA...</p>
-                    </div>
-
-                    <div class="results-table-wrapper" id="resultsWrapper" style="display: none;">
-                        <table class="results-table" id="resultsTable">
-                            <thead id="tableHead"></thead>
-                            <tbody id="tableBody"></tbody>
-                        </table>
                     </div>
                 </div>
             </section>

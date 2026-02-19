@@ -110,14 +110,19 @@ def natural_language_query():
         # Translate to KQL
         kql = log_analyzer.translator.translate(question, log_analyzer.available_tables)
         
-        # Apply time filter if provided
+        # Apply time filter if provided AND if KQL doesn't already have a time filter
         if time_filter:
-            # Insert time filter after the table name (first line)
-            lines = kql.strip().split('\n')
-            if len(lines) > 0:
-                # Insert time filter after first line (table name)
-                lines.insert(1, time_filter)
-                kql = '\n'.join(lines)
+            kql_lower = kql.lower()
+            # Check if KQL already has a TimeGenerated filter
+            has_time_filter = 'timegenerated' in kql_lower and ('ago(' in kql_lower or 'between' in kql_lower or '>=' in kql_lower)
+            
+            if not has_time_filter:
+                # Insert time filter after the table name (first line)
+                lines = kql.strip().split('\n')
+                if len(lines) > 0:
+                    # Insert time filter after first line (table name)
+                    lines.insert(1, time_filter)
+                    kql = '\n'.join(lines)
         
         # Execute query
         df = log_analyzer.client.query(kql)
